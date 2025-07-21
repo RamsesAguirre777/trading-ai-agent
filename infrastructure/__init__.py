@@ -1,0 +1,1 @@
+"""Infraestructura MCP y configuraciones."""

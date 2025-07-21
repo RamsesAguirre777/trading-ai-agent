@@ -1,0 +1,1 @@
+"""Estrategias de trading."""
