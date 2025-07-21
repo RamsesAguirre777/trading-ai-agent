@@ -1,0 +1,403 @@
+{
+  "name": "Binance SM Price-24hrStats-OrderBook-Kline Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "toolDescription": "Fetches the current price for a trading pair (e.g., BTCUSDT) from Binance Spot Market.\n\n✅ Expected Query Format (JSON):\n\njson\n{\n  \"symbol\": \"BTCUSDT\"\n}\nYou must provide a valid symbol (e.g., BTCUSDT, ETHUSDT, BNBUSDT) as a string.",
+        "url": "https://api.binance.com/api/v3/ticker/price",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "symbol"
+            }
+          ]
+        }
+      },
+      "id": "fa13353e-4c3c-4d47-8471-2502df48c278",
+      "name": "getCurrentPrice",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "position": [
+        -820,
+        1560
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetches 24-hour price statistics including open, high, low, close, and volume for a trading pair (e.g., BTCUSDT) from Binance Spot Market.\\n\\n\\u2705 Expected Query Format (JSON):\\n{\\n  \\\"symbol\\\": \\\"BTCUSDT\\\"\\n}\\nReplace 'BTCUSDT' with the symbol you want to monitor.",
+        "url": "https://api.binance.com/api/v3/ticker/24hr",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "symbol"
+            }
+          ]
+        }
+      },
+      "id": "e09d0bce-bf55-4c7c-9619-3310cb93a0fc",
+      "name": "get24hrStats",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "position": [
+        -580,
+        1560
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetches the live order book (bids and asks) for a specific trading pair from Binance.\n\n✅ Expected Input Format (JSON):\n{\n  \"symbol\": \"BTCUSDT\",\n  \"limit\": 100\n}\n\nYou may adjust the `limit` between 1 and 5000 (default: 100). The response includes `bids` and `asks` as arrays of [price, quantity] levels.",
+        "url": "https://api.binance.com/api/v3/depth",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "symbol"
+            },
+            {
+              "name": "limit"
+            }
+          ]
+        }
+      },
+      "id": "f2eb8c2d-2769-4498-a9eb-a714fe3293c3",
+      "name": "getOrderBook",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "position": [
+        -340,
+        1560
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetches candlestick (OHLCV) data for a trading pair and time interval from Binance. Supports optional time range filtering.\n\n✅ Expected Input Format (JSON):\n{\n  \"symbol\": \"BTCUSDT\",\n  \"interval\": \"15m\",\n  \"limit\": 100,\n  \"startTime\": 1690000000000,\n  \"endTime\": 1690100000000,\n  \"timeZone\": \"0\"\n}\n\nOnly `symbol` and `interval` are required. All other fields are optional.\n\nThe response is an array of arrays representing each candlestick:\n[\n  [ openTime, open, high, low, close, volume, closeTime, quoteVolume, numTrades, takerBase, takerQuote, ignore ]\n]",
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "symbol"
+            },
+            {
+              "name": "interval"
+            },
+            {
+              "name": "limit",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        }
+      },
+      "id": "839cebc3-1fd7-4537-9c1b-6b7a391c312e",
+      "name": "getKlines",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "position": [
+        -80,
+        1560
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "b75b8168-ef39-4150-9cfc-3026a76be502",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -1340,
+        1580
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {},
+      "id": "d4d11dc6-0a9e-4334-8ef9-42ef0db1bf45",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "position": [
+        -1100,
+        1580
+      ],
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "message"
+            },
+            {
+              "name": "sessionId"
+            }
+          ]
+        }
+      },
+      "id": "f797decc-b0fd-456c-b57a-64eac00b4eed",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -1220,
+        1220
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "You are the **Binance SM Price-24hrStats-OrderBook-Kline Agent**, responsible for gathering and summarizing real-time price and market structure data for any given trading pair. You always call **all four market data tools** and return **latest candles across all key intervals**.\n\n---\n\n### 🔧 Connected Tools (Always Executed)\n\n#### 📈 `getCurrentPrice`\n\n*Latest trade price*\n**Endpoint**: `/api/v3/ticker/price`\n**Input**:\n\n```json\n{ \"symbol\": \"BTCUSDT\" }\n```\n\n---\n\n#### 📊 `get24hrStats`\n\n*24-hour stats including OHLC and volume*\n**Endpoint**: `/api/v3/ticker/24hr`\n**Input**:\n\n```json\n{ \"symbol\": \"BTCUSDT\" }\n```\n\n---\n\n#### 🧾 `getOrderBook`\n\n*Live order book (top 100 bids/asks)*\n**Endpoint**: `/api/v3/depth`\n**Input**:\n\n```json\n{ \"symbol\": \"BTCUSDT\", \"limit\": 100 }\n```\n\n---\n\n#### 🕰️ `getKlines` (Multi-Interval)\n\n*Latest candle data for multiple timeframes*\n**Endpoint**: `/api/v3/klines`\n**Inputs** (run separately for each):\n\n```json\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"15m\", \"limit\": 1 }\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"1h\",  \"limit\": 1 }\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"4h\",  \"limit\": 1 }\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"1d\",  \"limit\": 1 }\n```\n\n---\n\n### 🧠 Behavior Instructions\n\n* Always extract the **symbol** from the user's prompt (e.g., \"ETHUSDT\", \"SOLUSDT\")\n* Trigger **all four tools** in parallel\n* For klines, call the endpoint 4 times (15m, 1h, 4h, 1d)\n* Merge all tool outputs into a **single response**\n* Format clearly for **Telegram** messaging\n\n---\n\n### 📤 Output Format (Telegram HTML)\n\nExample:\n\n```\n📊 BTCUSDT Market Overview\n\n💰 Price: $63,220  \n📈 24h Change: +2.3% | Volume: 45,210 BTC  \n\n📉 Order Book  \n• Top Bid: $63,190  \n• Top Ask: $63,230  \n\n🕰️ Latest Candles  \n• 15m: O: $63,000 | C: $63,220 | Vol: 320 BTC  \n• 1h : O: $62,700 | C: $63,300 | Vol: 980 BTC  \n• 4h : O: $61,800 | C: $63,500 | Vol: 2,410 BTC  \n• 1d : O: $59,200 | C: $63,220 | Vol: 7,850 BTC\n```\n\n---\n\n### ✅ Input Expectations\n\n* Input is in natural language, e.g.:\n\n  * \"What’s going on with BTC?\"\n  * \"Give me full SOL update\"\n  * \"Show 4h and 1d candles for ETH\"\n\n* If no symbol is found, ask:\n\n  > “Please provide the token symbol (e.g., BTCUSDT).”\n\n"
+        }
+      },
+      "id": "05fddf58-dd83-4952-a15a-35c91e9134a7",
+      "name": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        -820,
+        1220
+      ],
+      "typeVersion": 1.9
+    },
+    {
+      "parameters": {
+        "content": "## Triggered by Parent Workflow\nNode: When Executed by Another Workflow\nThis agent only activates when another agent (e.g., **Financial Analyst)** passes:",
+        "height": 500,
+        "color": 4
+      },
+      "id": "327958f1-2bdd-4a41-9f39-d8d94b808493",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1280,
+        920
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Main Reasoning Agent\nNode: Binance SM Price-24hrStats-OrderBook-Kline Agent\nThis is the AI interface that:\n\n**Accepts the prompt (symbol)**\n\nExtracts the **trading pair**\n\n**Automatically routes the query to all four** price tools\n\nCombines results and sends formatted response to parent agent\n\n",
+        "height": 460,
+        "width": 500,
+        "color": 5
+      },
+      "id": "c5790eba-6d42-4ef7-99b8-0e0e128d7f37",
+      "name": "Sticky Note8",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -940,
+        940
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## OpenAI Formatter\nNode: OpenAI Chat Model (**gpt-4.1-mini**)\nUsed to:\n\nParse raw JSON responses\n\n**Convert numeric results into clean text blocks**\n\n**Label important stats** (e.g., trend, spread, volatility)\n\n",
+        "height": 520,
+        "width": 220
+      },
+      "id": "faf3ce53-e40f-43e6-8d93-040f46cb696d",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1400,
+        1520
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## Simple Memory\nStores the session and symbol context. **Ensures continuity across tool calls** and can be used for **summarization logic.**\n\n",
+        "height": 520,
+        "width": 220,
+        "color": 3
+      },
+      "id": "76f991c2-edcc-4710-b46f-a17d758e70af",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1160,
+        1520
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n##  getCurrentPrice\nType: toolHttpRequest\nEndpoint:\nhttps://api.binance.com/api/v3/ticker/price\n\nInput:\n\njson\n{ \"symbol\": \"BTCUSDT\" }\n\n**Returns last trade price.**",
+        "height": 620,
+        "width": 220,
+        "color": 6
+      },
+      "id": "52d349ff-17e9-4b91-8743-4924980f3e13",
+      "name": "Sticky Note3",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -880,
+        1520
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## get24hrStats\nType: toolHttpRequest\nEndpoint:\nhttps://api.binance.com/api/v3/ticker/24hr\n\nInput:\n\njson\n{ \"symbol\": \"BTCUSDT\" }\n\n**Returns 24h OHLC, % change, and volume.**\n\n",
+        "height": 680,
+        "width": 220,
+        "color": 6
+      },
+      "id": "ef2a58d8-ece5-4a9d-b309-a93d9792cc12",
+      "name": "Sticky Note4",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -640,
+        1520
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## getOrderBook\nType: toolHttpRequest\nEndpoint:\nhttps://api.binance.com/api/v3/depth\n\nInput:\n\njson\n{\n  \"symbol\": \"BTCUSDT\",\n  \"limit\": 100\n}\n\n**Returns top 100 bids and asks.**",
+        "height": 720,
+        "width": 220,
+        "color": 6
+      },
+      "id": "08e85b8e-c5d4-4919-9923-bd388834cf3b",
+      "name": "Sticky Note5",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -400,
+        1520
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## getKlines (Multi-Timeframe)\nType: toolHttpRequest\nEndpoint:\nhttps://api.binance.com/api/v3/klines\nInputs:\n\nExecuted 4 times, once for each timeframe:\n\njson\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"15m\", \"limit\": 1 }\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"1h\",  \"limit\": 1 }\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"4h\",  \"limit\": 1 }\n{ \"symbol\": \"BTCUSDT\", \"interval\": \"1d\",  \"limit\": 1 }\n\n**Returns OHLCV for each interval’s most recent candle.**",
+        "height": 720,
+        "width": 220,
+        "color": 6
+      },
+      "id": "8516ae78-28c9-45e7-8644-406cb7f9e011",
+      "name": "Sticky Note6",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -140,
+        1520
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "# 📈 Binance SM Price-24hrStats-OrderBook-Kline Tool – Documentation\n\nA market structure sub-agent that collects **real-time price data**, **order book depth**, **24-hour statistics**, and **multi-timeframe candlestick data** for any Binance Spot trading pair.\n\n---\n\n## 🎯 Purpose\n\nThis tool provides the foundation of all market structure insights for a symbol by:\n\n* Fetching current price (`/ticker/price`)\n* Retrieving 24h stats like OHLC and volume (`/ticker/24hr`)\n* Capturing order book data (bids/asks, `/depth`)\n* Pulling latest candlesticks for: **15m, 1h, 4h, 1d** intervals (`/klines`)\n\n---\n\n## 🧩 Included API Endpoints\n\n| Tool Name         | Endpoint               | Description                                   |\n| ----------------- | ---------------------- | --------------------------------------------- |\n| `getCurrentPrice` | `/api/v3/ticker/price` | Latest trade price                            |\n| `get24hrStats`    | `/api/v3/ticker/24hr`  | OHLC + volume in past 24 hours                |\n| `getOrderBook`    | `/api/v3/depth`        | Top 100 bid/ask levels                        |\n| `getKlines`       | `/api/v3/klines`       | OHLCV candles for 15m, 1h, 4h, 1d (limit = 1) |\n\nAll tools are triggered **together**, and return unified results to the parent agent.\n\n---\n\n## 🛠️ Workflow Architecture\n\n| Node                                  | Function                                                 |\n| ------------------------------------- | -------------------------------------------------------- |\n| ✅ `When Executed by Another Workflow` | Triggers this tool from Financial Analyst Agent          |\n| 🤖 `Binance SM Price... Agent`        | Receives prompt, extracts symbol, calls all market tools |\n| 💡 `OpenAI Chat Model (gpt-4o-mini)`  | Converts raw API output into clean Telegram summary      |\n| 🧠 `Simple Memory`                    | Tracks session context (`sessionId`, last-used symbol)   |\n\n---\n\n## 📥 Expected Input\n\nThis tool is **not user-facing** — it is triggered by a parent workflow with input like:\n\n```json\n{\n  \"message\": \"BTCUSDT\",\n  \"sessionId\": \"539847013\"\n}\n```\n\n---\n\n## 🧾 Telegram Output Example\n\n```\n📊 BTCUSDT Market Overview\n\n💰 Price: $63,220  \n📈 24h Change: +2.3% | Volume: 45,210 BTC  \n\n📉 Order Book  \n• Top Bid: $63,190  \n• Top Ask: $63,230  \n\n🕰️ Latest Candles  \n• 15m: O: $63,000 | C: $63,220 | Vol: 320 BTC  \n• 1h : O: $62,700 | C: $63,300 | Vol: 980 BTC  \n• 4h : O: $61,800 | C: $63,500 | Vol: 2,410 BTC  \n• 1d : O: $59,200 | C: $63,220 | Vol: 7,850 BTC\n```\n\n---\n\n## ✅ Use Case Scenarios\n\n| Scenario                                | Result                                           |\n| --------------------------------------- | ------------------------------------------------ |\n| Trader asks for “current BTC data”      | Returns full snapshot across all structure tools |\n| Analyst needs “candles for SOL”         | Returns 15m, 1h, 4h, 1d OHLCV for SOLUSDT        |\n| Quant AI Agent triggers market analysis | Sends back clean Telegram-ready price structure  |\n\n---\n\n## 🚀 Installation Steps\n\n### 1. Import Workflow\n\n* Load this JSON into your n8n instance\n* Activate and rename for clarity if needed\n\n### 2. Credential Setup\n\n* No auth required for Binance public API\n* Ensure OpenAI API key is connected to `OpenAI Chat Model` node\n\n### 3. Trigger Configuration\n\n* This tool is **only executed via `Execute Workflow`** by:\n\n  * `Binance SM Financial Analyst Tool`\n  * `Binance Spot Market Quant AI Agent`\n\n---\n\n## 🔐 Licensing & Support\n\n🔗 **Don Jayamaha – LinkedIn**\n[http://linkedin.com/in/donjayamahajr](http://linkedin.com/in/donjayamahajr)\n\n© 2025 Treasurium Capital Limited Company. All rights reserved.\nThis automation system — including prompt flow, logic architecture, and tool structure — is proprietary to Treasurium Capital Limited Company. Redistribution, resale, or replication without license is prohibited under U.S. and international law.\n\n",
+        "height": 2480,
+        "width": 1220
+      },
+      "id": "5bb7d871-1094-4cb8-a244-721e77f17da5",
+      "name": "Sticky Note7",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        340,
+        -20
+      ],
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "getKlines": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get24hrStats": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getOrderBook": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getCurrentPrice": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Binance SM Price-24hrStats-OrderBook-Kline Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "bbeac8bf-3f7a-4765-8cb5-17c897b7db5d",
+  "meta": {
+    "instanceId": "c2f222dec590bd18822443a5488a8477fdebbc865744c111da086d9a82f0d6be"
+  },
+  "id": "Ib7cbvY0nI6Fc6ZH",
+  "tags": []
+}

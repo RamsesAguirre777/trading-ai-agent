@@ -1,0 +1,503 @@
+/* 
+🚀 Trading Command Center 3.0 - Ramses 10 Timeframes
+Advanced CSS for Multi-Timeframe Trading Dashboard
+*/
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
+    color: #ffffff;
+    min-height: 100vh;
+    overflow-x: auto;
+}
+
+.dashboard-container {
+    padding: 20px;
+    max-width: 1800px;
+    margin: 0 auto;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+    background: linear-gradient(45deg, #4caf50, #2196f3, #ff9800);
+    background-size: 200% 200%;
+    animation: gradient 3s ease infinite;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+@keyframes gradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.main-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.panel {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.panel-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #4caf50;
+    border-bottom: 2px solid #4caf50;
+    padding-bottom: 5px;
+}
+
+/* EPIC 10-TIMEFRAME HEATMAP */
+.confluence-heatmap {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+}
+
+.timeframe-card {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.timeframe-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.5s;
+}
+
+.timeframe-card:hover::before {
+    left: 100%;
+}
+
+.timeframe-card:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.3);
+}
+
+.timeframe-label {
+    font-size: 12px;
+    color: #ccc;
+    margin-bottom: 4px;
+    font-weight: bold;
+}
+
+.confluence-score {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.score-trend {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+/* Dynamic coloring based on confluence strength */
+.score-strong-bullish { 
+    color: #00ff00; 
+    text-shadow: 0 0 10px #00ff00;
+    animation: pulse-green 2s infinite;
+}
+.score-bullish { color: #4caf50; }
+.score-weak-bullish { color: #8bc34a; }
+.score-neutral { color: #ff9800; }
+.score-weak-bearish { color: #ff5722; }
+.score-bearish { color: #f44336; }
+.score-strong-bearish { 
+    color: #ff0000; 
+    text-shadow: 0 0 10px #ff0000;
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-green {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* MASTER CONFLUENCE DISPLAY */
+.master-confluence {
+    background: linear-gradient(45deg, #4caf50, #2196f3);
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+.master-confluence::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: repeating-conic-gradient(
+        from 0deg, 
+        transparent 0deg, 
+        rgba(255,255,255,0.1) 2deg, 
+        transparent 4deg
+    );
+    animation: rotate 8s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.master-confluence-content {
+    position: relative;
+    z-index: 1;
+}
+
+.confluence-value {
+    font-size: 36px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+
+.confluence-label {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    margin-top: 5px;
+}
+
+.confluence-breakdown {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-top: 15px;
+    font-size: 11px;
+}
+
+.breakdown-item {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px 4px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.algorithm-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.algorithm-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 10px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    border-left: 3px solid transparent;
+}
+
+.algorithm-item:hover {
+    background: rgba(0, 0, 0, 0.4);
+    transform: translateX(5px);
+}
+
+.algorithm-item.active {
+    border-left-color: #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.algorithm-name {
+    flex: 1;
+    font-size: 13px;
+}
+
+.algorithm-signal {
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    margin: 0 8px;
+    min-width: 60px;
+    text-align: center;
+}
+
+.signal-bullish {
+    background: #4caf50;
+    color: white;
+}
+
+.signal-bearish {
+    background: #f44336;
+    color: white;
+}
+
+.signal-neutral {
+    background: #ff9800;
+    color: white;
+}
+
+.signal-extreme {
+    background: #9c27b0;
+    color: white;
+    animation: pulse 2s infinite;
+}
+
+.signal-expansion {
+    background: linear-gradient(45deg, #4caf50, #2196f3);
+    color: white;
+    animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+.algorithm-score {
+    font-weight: bold;
+    width: 50px;
+    text-align: right;
+    font-size: 12px;
+}
+
+.expansion-levels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.level-group {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    border-radius: 8px;
+}
+
+.level-title {
+    font-size: 13px;
+    color: #4caf50;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+.level-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.level-price {
+    font-weight: bold;
+    color: #2196f3;
+}
+
+.execution-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.execution-card {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px;
+    border-radius: 8px;
+    border-left: 3px solid #4caf50;
+}
+
+.execution-title {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #4caf50;
+}
+
+.execution-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: white;
+    margin-bottom: 4px;
+}
+
+.execution-subtitle {
+    font-size: 11px;
+    color: #ccc;
+}
+
+.telegram-alert {
+    background: rgba(33, 150, 243, 0.2);
+    border: 1px solid #2196f3;
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 12px;
+}
+
+.alert-title {
+    font-weight: bold;
+    color: #2196f3;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.alert-message {
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.bottom-panel {
+    grid-column: 1 / -1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.control-btn {
+    background: linear-gradient(45deg, #4caf50, #2196f3);
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    font-size: 12px;
+}
+
+.control-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+}
+
+.symbol-input {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.symbol-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+}
+
+.status-active {
+    background: #4caf50;
+}
+
+.status-warning {
+    background: #ff9800;
+}
+
+/* RAMSES METHODOLOGY SIGNATURE */
+.methodology-signature {
+    background: linear-gradient(45deg, #9c27b0, #673ab7);
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 15px;
+    text-align: center;
+}
+
+.methodology-title {
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 5px;
+    color: white;
+}
+
+.methodology-subtitle {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .confluence-heatmap {
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .confluence-heatmap {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(5, 1fr);
+    }
+    
+    .execution-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .expansion-levels {
+        grid-template-columns: 1fr;
+    }
+}

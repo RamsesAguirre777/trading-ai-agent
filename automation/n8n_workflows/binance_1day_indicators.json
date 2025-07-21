@@ -1,0 +1,248 @@
+{
+  "name": "Binance SM 1day Indicators Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "b3c73550-ba2a-47f9-a5fa-e8c83dec95f0",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -200,
+        1700
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {},
+      "id": "e2dfae18-6712-42f9-88e4-1062e205b232",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "position": [
+        60,
+        1720
+      ],
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "message"
+            },
+            {
+              "name": "sessionId"
+            }
+          ]
+        }
+      },
+      "id": "7c256b7b-67cf-4eee-ac31-607eac9177c7",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -360,
+        1360
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "You are the **Binance 1-Day Technical Indicator Agent**, responsible for calculating and returning **1-day interval signals** for any Binance Spot Market pair. You help detect major trend shifts, long-term support/resistance, and macro market behavior.\n\n---\n\n### 🔗 Connected Tools (via internal workflow)\n\nYou call the following indicators using `https://treasurium.app.n8n.cloud/webhook/1d-indicators`:\n\n* **RSI** (14-period)\n* **MACD** (12/26/9 config)\n* **Bollinger Bands** (20-period, 2×STD)\n* **SMA** (20-period)\n* **EMA** (20-period)\n* **ADX** (14-period with DI+ and DI−)\n\n---\n\n### 📥 Expected Input Format\n\n```json\n{\n  \"message\": \"SOLUSDT\",\n  \"sessionId\": \"telegram_chat_id\"\n}\n```\n\n* `message`: A valid Binance Spot Market symbol (e.g., SOLUSDT, MATICUSDT)\n* `sessionId`: For preserving user context and session-based replies\n\n---\n\n### 📊 Behavior\n\n* Sends POST request to:\n\n  ```\n  https://treasurium.app.n8n.cloud/webhook/1d-indicators\n  ```\n\n  with:\n\n  ```json\n  {\n    \"symbol\": \"SOLUSDT\"\n  }\n  ```\n\n* Retrieves **at least 40 daily candles** via Binance API\n\n* Calculates and merges results from all indicators listed above\n\n* Returns a single unified array for downstream agent interpretation\n\n---\n\n### 🧠 Use Case Scenarios\n\n* Identify **long-term market sentiment and trend shifts**\n* Support **macro trade setups** or high-confidence swing positions\n* Anchor **support/resistance levels** across multi-timeframe views\n* Feed **Financial Analyst Tool** and **Quant AI Agent** with base trend orientation\n\n---\n\n### ⚠️ Operational Notes\n\n* Validate that the symbol is correctly formatted (uppercase, no typos)\n* Ensure Binance returns sufficient 1d candles (fallback if not)\n* Timestamp consistency is required across indicators\n* Return all calculated metrics in structured JSON format with labels\n\n"
+        }
+      },
+      "id": "70864d0f-5bf1-49a1-adef-0b3f9595bfaa",
+      "name": "Binance SM 1day Indicators Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        40,
+        1360
+      ],
+      "typeVersion": 1.9
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://treasurium.app.n8n.cloud/webhook/1d-indicators",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dcd89361-4434-4521-9194-ac86fb0b5bde",
+      "name": "HTTP Request 1d Indicators Tool",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "position": [
+        300,
+        1680
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "content": "## Workflow Trigger\nNode: When Executed by Another Workflow\nThis workflow does not start on its own — it is always triggered by:\n\n**Binance SM Financial Analyst Tool**\n\n**Binance Quant AI Agent**",
+        "height": 500,
+        "color": 4
+      },
+      "id": "7202c0a3-91cb-43d1-817f-1cf22a6cfd49",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -420,
+        1040
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Main Reasoning Agent\nNode: **Binance SM 1day Indicators Agent**\n\nYou calculate daily **RSI, MACD, Bollinger Bands, SMA, EMA, and ADX** for any Binance symbol. Your goal is to **detect macro sentiment, support/resistance zones, and long-term trend setups**.",
+        "height": 380,
+        "width": 500,
+        "color": 5
+      },
+      "id": "1e4006a1-1141-439e-a38e-344db2280c17",
+      "name": "Sticky Note8",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -80,
+        1160
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n##   OpenAI Chat Model\nNode: OpenAI Chat Model\nModel: **gpt-4.1-mini**\nThis node interprets:\n\nWhether the trend is **forming, consolidating, or reversing**\n\nTags like **\"Bearish Reversal\", \"Momentum Building\"**, etc.\n\nTelegram-ready summaries",
+        "height": 520,
+        "width": 220
+      },
+      "id": "7bfaa7c6-8a8b-44dc-bf23-ad143f6e9a86",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -280,
+        1660
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## Session Memory\nNode: **Simple Memory\nStores sessionId, symbol, and last-used indicators** for tracking across multi-timeframe reports.",
+        "height": 520,
+        "width": 220,
+        "color": 3
+      },
+      "id": "2c96e856-ee69-469f-b34a-3eb04d5c6ef5",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -20,
+        1660
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## 1D Indicator Tool Call\nNode: HTTP Request 1d Indicators Tool\n\n**Sends a POST request to:**\n\n\nhttps://treasurium.app.n8n.cloud/webhook/1d-indicators\n\nPayload:\n\njson\n{\n  \"symbol\": \"SOLUSDT\"\n}\nCalculates:\n\n**RSI (14)\n\nMACD (12,26,9)\n\nBollinger Bands (20/2)\n\nSMA / EMA (20)\n\nADX (14 +DI/−DI)**\n\nUses the latest **40 candles** of 1-day interval data from **Binance**.\n\n",
+        "height": 860,
+        "width": 220,
+        "color": 6
+      },
+      "id": "41e81937-7278-46fb-b378-c33ba1d56338",
+      "name": "Sticky Note5",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        240,
+        1660
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "# 🗓️ Binance SM 1day Indicators Tool – Documentation\n\nThis workflow acts as the macro-trend analysis unit of the Binance Spot Market Quant AI Agent. It calculates long-term indicators using 1-day candles and identifies major trend reversals, support zones, and macro structure.\n\n---\n\n## 🎯 Purpose\n\n* Retrieve 1-day OHLCV data for any Binance trading pair (last 40 candles)\n* Calculate daily indicators: RSI, MACD, Bollinger Bands, ADX, SMA, EMA\n* Send all raw indicator outputs to GPT for interpretation\n* Return high-confidence macro trend assessment, formatted for Telegram or AI reasoning layers\n\n---\n\n## ⚙️ Core Workflow Components\n\n| Node Name                           | Function                                                         |\n| ----------------------------------- | ---------------------------------------------------------------- |\n| `When Executed by Another Workflow` | Trigger (activated by Quant AI Agent or Financial Analyst Tool)  |\n| `Binance SM 1day Indicators Agent`  | Main logic agent for input routing and tool coordination         |\n| `HTTP Request 1d Indicators Tool`   | Calls webhook for real indicator calculations                    |\n| `OpenAI Chat Model (gpt-4.1-mini)`  | Interprets numerical outputs into human-readable trading signals |\n| `Simple Memory`                     | Tracks symbol and session context                                |\n\n---\n\n## 📥 Input Format\n\n```json\n{\n  \"message\": \"MATICUSDT\",\n  \"sessionId\": \"telegram_chat_id\"\n}\n```\n\n* `message`: Target Binance Spot Market symbol (uppercase)\n* `sessionId`: Used to track Telegram conversations and agent memory\n\n---\n\n## 🧠 Calculated Indicators\n\n| Indicator      | Details                            |\n| -------------- | ---------------------------------- |\n| RSI (14)       | Identifies overbought/oversold     |\n| MACD (12,26,9) | Detects trend shifts and momentum  |\n| BBANDS (20, 2) | Volatility squeeze or expansion    |\n| SMA (20)       | Macro trend support/resistance     |\n| EMA (20)       | Faster-moving confirmation layer   |\n| ADX (14)       | Strength of trend (includes DI+/-) |\n\nWebhook endpoint:\n\n```\nPOST https://treasurium.app.n8n.cloud/webhook/1d-indicators\n```\n\nPayload:\n\n```json\n{\n  \"symbol\": \"MATICUSDT\"\n}\n```\n\n---\n\n## 📤 GPT Output Format Example\n\n```\n📅 1D Overview – MATICUSDT\n\n• RSI: 71 → Overbought  \n• MACD: Bearish Cross forming  \n• BBANDS: Widening Volatility  \n• EMA < SMA → Downtrend Momentum  \n• ADX: 33 → High Trend Strength\n```\n\n---\n\n## 📊 Use Case Scenarios\n\n| Scenario                                 | Behavior                                                    |\n| ---------------------------------------- | ----------------------------------------------------------- |\n| Swing trader requests long-term trend    | Output highlights multi-day reversal or continuation setups |\n| Agent confirms bias before entry         | Used in conjunction with 15m–4h for confidence stacking     |\n| Analyst wants sentiment-free macro trend | This tool uses price structure only (no news input)         |\n\n---\n\n## 📦 Setup Instructions\n\n### 1. Import Workflow\n\n* Upload JSON into your n8n project\n* Rename for clarity if needed\n\n### 2. Configure GPT + Webhook\n\n* Ensure OpenAI API key is linked to GPT node\n* Confirm webhook `/1d-indicators` is active and functional\n\n### 3. Link Parent Workflows\n\n* This tool must be called by:\n\n  * `Binance SM Financial Analyst Tool`\n  * `Binance Spot Market Quant AI Agent`\n\n---\n\n## 🧾 Output Channel\n\n* This tool is not user-facing\n* Sends formatted summaries and structured arrays back to the calling agent\n\n---\n\n## 🔐 Licensing & Support\n\n🔗 **Don Jayamaha – LinkedIn**\n[http://linkedin.com/in/donjayamahajr](http://linkedin.com/in/donjayamahajr)\n\n© 2025 Treasurium Capital Limited Company. All rights reserved.\nThis tool is licensed for internal automation only. Its structure, API logic, prompt format, and data orchestration are protected under U.S. intellectual property law. Reuse or sale without a license is prohibited.\n",
+        "height": 2820,
+        "width": 1400
+      },
+      "id": "e89f4d0a-3e8f-4ec0-96d5-d698248b6f6c",
+      "name": "Sticky Note3",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        660,
+        0
+      ],
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Binance SM 1day Indicators Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Binance SM 1day Indicators Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request 1d Indicators Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance SM 1day Indicators Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Binance SM 1day Indicators Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "31a0c2a2-3c6f-402d-9ea4-8f5e10455192",
+  "meta": {
+    "instanceId": "c2f222dec590bd18822443a5488a8477fdebbc865744c111da086d9a82f0d6be"
+  },
+  "id": "ITbjwj1S89ujvxYO",
+  "tags": []
+}

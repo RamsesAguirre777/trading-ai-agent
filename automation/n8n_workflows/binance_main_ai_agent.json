@@ -1,0 +1,492 @@
+{
+  "name": "Binance Spot Market Quant AI Agent | GPT-4o + Telegram (Main Interface)",
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "3db5355a-f62b-44c7-9008-5eebca7f3e1d",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -1780,
+        2040
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "You are the **Binance Spot Market Quant AI Agent**, responsible for generating structured, professional swing-trading reports for **any trading pair** on the Binance Spot Market. You use **validated technical indicators**, **order flow data**, and **curated crypto sentiment** to create actionable trading strategies.\n\n---\n\n### 🔗 Connected Tools\n\n1. **🧠 Binance Financial Market Analyst Tool**\n\n   • Aggregates outputs from:\n\n   * `Binance 15min Indicators Tool`\n   * `Binance 1h Indicators Tool`\n   * `Binance 4h Indicators Tool`\n   * `Binance 1d Indicators Tool`\n   * `Binance Price/OrderBook/Kline Tool`\n\n   • Each indicator tool calculates:\n\n   * **RSI, BBANDS, SMA, EMA, ADX, MACD**\n   * Based on the **latest 20 klines** for its interval\n   * Returns both values and signal labels (e.g. overbought, divergence)\n\n   • The Price Tool provides:\n\n   * **Live price**\n   * **24h OHLCV**\n   * **Order book depth (top 100 bids/asks)**\n   * **Klines** for `15m`, `1h`, `4h`, and `1d` intervals\n\n2. **📰 Binance News and Sentiment Analyst Tool**\n\n   • Pulls from sources like:\n\n   * CoinDesk, Cointelegraph, BitcoinMagazine, NewsBTC, CryptoBriefing, and more\n\n   • Returns:\n\n   * **Sentiment Score**: Bullish / Bearish / Neutral\n   * **Summary**: 2–3 sentence market snapshot\n   * **Top 3–5 headlines** (with source links)\n\n---\n\n### 📊 Core Responsibilities\n\nYou always:\n\n1. **Call all tools concurrently** for each query\n\n   * Pass the extracted symbol and sessionId as input\n   * Wait for structured results from each tool\n   * Do not skip any tool even if user prompt is vague\n\n2. **Perform full technical analysis** for the symbol\n\n   * Short-term: `15m + 1h`\n   * Mid-term: `4h`\n   * Long-term: `1d`\n   * Detect breakouts, trend shifts, divergences, and confluence signals\n   * Confirm findings using multiple timeframes and indicator alignment\n\n3. **Synthesize the final report** with:\n\n<b>Spot Trade Strategy</b>\n• Action: Buy / Sell / Hold\n• Entry Price, Stop Loss, Take Profit\n• Rationale:\n - <b>Price Action Signals</b>\n - <b>Lagging Indicator Confirmation</b>\n - <b>Sentiment Alignment</b>\n\n<b>Leverage Strategy</b>\n• Position: Long / Short\n• Leverage: 2x / 3x / 5x\n• Rationale + Risk Zones\n\n4. **Score signal strength**\n   • Confidence Score: `0–100`\n   • Label: Low / Medium / High / Very High\n\n5. **Include sentiment and headlines section**\n   • `<b>News Sentiment:</b>` \\[summary]\n   • `•` Top headlines with clickable links\n\n---\n\n### 📤 Output Format (Telegram HTML)\n\nStart with:\n\n```html\n<b>{{SYMBOL}} Market Report</b>\n```\n\nUse clean formatting:\n\n* `<b>` for headers\n* `•` for bullet lists\n* Logical grouping: price > indicators > strategy > sentiment\n\n---\n\n### ⚠️ Rules\n\nDO NOT:\n\n* Fabricate any values\n* Repeat this system message\n* Output raw JSON or API structure\n\nONLY use **tool-delivered** and **validated** data. Write with clarity and tone of a senior quant analyst.\n"
+        }
+      },
+      "id": "1993625f-237b-42d8-a03d-bd85b6d95137",
+      "name": "Binance Spot Market Quant AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        -1420,
+        1580
+      ],
+      "typeVersion": 1.8
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "fd29d3a6-2cf0-44f4-b010-49b3332b8bcb",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [
+        -2340,
+        1580
+      ],
+      "webhookId": "944e6f8d-ffcc-4692-a777-7410f2fd4016",
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "jsCode": "if ($input.first().json.message.from.id !== <Replace Telegram ID>) { // Replace with your actual ID\n  return {unauthorized: true};\n} else {\n  // Return the original data when authorized\n  return $input.all();\n}"
+      },
+      "id": "93e806b5-5fdf-49bd-a60b-4ebcca0a2cf4",
+      "name": "User Authentication (Replace Telegram ID)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -2020,
+        1580
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "47598bf1-e55f-4cc0-ae75-272085e7ce02",
+              "name": "=sessionId",
+              "type": "string",
+              "value": "={{ $json.message.chat.id }}"
+            },
+            {
+              "id": "daa49d74-e55e-47bc-ac52-8686d591ab83",
+              "name": "message",
+              "type": "string",
+              "value": "={{ $json.message.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "af9cd1ce-29e0-476e-aa6b-fc8c3807b6c4",
+      "name": "Adds \"SessionId\"",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -1740,
+        1580
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7b94581d-9cf3-4c38-918a-30300d98a46f",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        -440,
+        1580
+      ],
+      "webhookId": "79d6c29c-1e04-414a-9989-afb1f7a58035",
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: assumes incoming message in `item.json.message`\nconst input = $json.output;\nconst chunkSize = 4000;\n\n// Function to split text\nfunction splitMessage(text, size) {\n  const result = [];\n  for (let i = 0; i < text.length; i += size) {\n    result.push(text.substring(i, i + size));\n  }\n  return result;\n}\n\n// Logic\nif (input.length <= chunkSize) {\n  return [{ json: { message: input } }];\n} else {\n  const chunks = splitMessage(input, chunkSize);\n  return chunks.map(chunk => ({ json: { message: chunk } }));\n}"
+      },
+      "id": "ae0f7e66-7bb3-4ee2-bc18-b5ad5348a76f",
+      "name": "Splits message is more than 4000 characters",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -860,
+        1580
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "toolDescription": "It will post the name of the cryptocurrency to get the News and Sentiment Analysis for use in the Binance Quant AI Agent.",
+        "method": "POST",
+        "url": "https://treasurium.app.n8n.cloud/webhook/newsanalyst",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "=={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8e7a865b-d3fa-4c71-9b7c-4afcc723f1be",
+      "name": "News and Sentiment Analysis Request",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "position": [
+        -1220,
+        2020
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Nm41n4i6VMhrixZs",
+          "cachedResultName": "Work Drive — Binance SM Financial Analyst Tool"
+        },
+        "workflowInputs": {
+          "value": {
+            "message": "={{ $fromAI(\"message\",\"Populate this with a relevant message to this subagent\")}}",
+            "sessionId": "={{ $json.sessionId }}"
+          },
+          "schema": [
+            {
+              "id": "message",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "message",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sessionId",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "sessionId",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "8d410af9-5f0d-40cb-8b1b-e0dcc8ba25ce",
+      "name": "Binance SM Financial Analyst Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "position": [
+        -960,
+        2000
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {},
+      "id": "dc3371c2-934f-4b42-a1c7-c277db8a0c78",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "position": [
+        -1500,
+        2040
+      ],
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "content": "## Trigger Incoming Telegram Command\nNode: Telegram Trigger\n**Listens for new Telegram messages** from users.\nTriggers the full agent process and passes raw user input downstream.",
+        "height": 460,
+        "color": 4
+      },
+      "id": "d84d7131-434c-42ab-ada4-0af30c0226fc",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2400,
+        1320
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Validate User Access\nNode: User **Authentication\nChecks incoming Telegram ID** against the approved user list.",
+        "height": 460,
+        "color": 2
+      },
+      "id": "9cbc090d-1655-4eb4-925d-25e6fdab57a8",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2080,
+        1320
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Generate Session Metadata\nNode: Add S**essionId\nCreates a sessionId using the Telegram chat_id**.\nThis is passed into all downstream tools for memory and workflow routing.",
+        "height": 460,
+        "color": 5
+      },
+      "id": "bdfaffaf-da50-4365-8bbe-68e470525e20",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1800,
+        1320
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Main AI Agent: Report Generator\nNode: Binance Spot Market Quant AI Agent\nThis is the **core orchestrator**. It uses OpenAI to reason over:\n\n**Multi-timeframe indicator outputs**\n\n**Order book + price data**\n\n**Sentiment and news**\n\nIt calls both tools in parallel:\n\n**Binance Financial Market Analyst Tool**\n\n**Binance News & Sentiment Analyst Tool**\n\nThen it synthesizes a final trading report.",
+        "height": 580,
+        "width": 480,
+        "color": 7
+      },
+      "id": "51871b94-1ef8-489d-ae22-86cecec1cbb8",
+      "name": "Sticky Note3",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1520,
+        1200
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Handle Telegram Message Limits\nNode: Code (split logic)\nChecks if the **GPT output exceeds 4000 characters**.\nIf so, it splits the message into safe chunks and passes them on sequentially.",
+        "height": 460,
+        "width": 260,
+        "color": 5
+      },
+      "id": "3c69447b-5fc4-4e4c-aca0-47435695d9d1",
+      "name": "Sticky Note4",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -940,
+        1320
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Send Final Report to Telegram\nNode: Telegram sendMessage\nSends **formatted HTML report (or split chunks)** directly to the authenticated user via Telegram bot.",
+        "height": 460,
+        "color": 4
+      },
+      "id": "7e376802-8a47-41c3-94e3-ebe047bd486f",
+      "name": "Sticky Note5",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -500,
+        1320
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## GPT Model for Reasoning\nNode: OpenAI Chat Model\nModel: **gpt-4o-mini**\nUsed to:\n\nInterpret signal values\n\nGenerate structured HTML\n\n**Recommend spot and leverage trades**\n\n",
+        "height": 540
+      },
+      "id": "17a46a76-bd63-4c7b-866a-0f6871cc6b03",
+      "name": "Sticky Note6",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1860,
+        1940
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## Binance News & Sentiment Analyst Tool\nNode: ToolWebhook\nSends the symbol to:\n\nPOST https://treasurium.app.n8n.cloud/webhook/newsanalyst\nReturns:\n\n**📈 Sentiment (Bullish / Neutral / Bearish)**\n\n**📰 3–5 crypto headlines**\n\n**🧠 Summary paragraph (1–3 lines)**",
+        "height": 660,
+        "color": 6
+      },
+      "id": "ed7c2f95-2d53-4095-a260-8fcce94a380a",
+      "name": "Sticky Note7",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1300,
+        1940
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## Binance Financial Market Analyst Tool\nNode: ToolWorkflow\nCalls all connected indicator agents:\n\n**15m, 1h, 4h, 1d**\n\nPrice/Orderbook/Klines agent\n\n**Each indicator (RSI, MACD, BBANDS, SMA, EMA, ADX)** is returned per timeframe, plus order book depth and candle snapshots.",
+        "height": 660,
+        "color": 6
+      },
+      "id": "c3d20f6b-2e49-41d9-9f6a-700126aeac14",
+      "name": "Sticky Note8",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1040,
+        1940
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n## Short-Term Memory Module\nNode: **Simple Memory\nStores the sessionId**, symbol, and other state data.\nUseful for:\n\nMulti-turn Telegram interactions\n\nTracking indicator agreement across timeframes\n\n",
+        "height": 540,
+        "color": 3
+      },
+      "id": "915ab4a5-c976-4539-9909-ef80bd68074d",
+      "name": "Sticky Note9",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1580,
+        1940
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "# 🧠 Binance Spot Market Quant AI Agent – Full System Documentation\n\nA professional-grade AI automation system for **spot market trading insights** on Binance. It analyzes **multi-timeframe technical indicators**, **live price/order data**, and **crypto sentiment**, then delivers fully formatted **Telegram-style trading reports**.\n\n---\n\n## 🧩 Included Workflows\n\n> You must install and activate **all of the following workflows** for the system to function correctly:\n\n| ✅ Workflow Name                                    | 📌 Function Description                                                          |\n| -------------------------------------------------- | -------------------------------------------------------------------------------- |\n| Binance Spot Market Quant AI Agent                 | Final AI orchestrator. Parses user prompt and generates Telegram-ready reports.  |\n| Binance SM Financial Analyst Tool                  | Calls indicator tools and price/order data tools. Synthesizes structured inputs. |\n| Binance SM News and Sentiment Analyst Webhook Tool | Analyzes crypto sentiment, gives summary and headlines via POST webhook.         |\n| Binance SM Price/24hrStats/OrderBook/Kline Tool    | Pulls price, order book, 24h stats, and OHLCV klines for 15m–1d.                 |\n| Binance SM 15min Indicators Tool                   | Calculates 15m RSI, MACD, BBANDS, ADX, SMA/EMA from Binance kline data.          |\n| Binance SM 1hour Indicators Tool                   | Same as above but for 1h timeframe.                                              |\n| Binance SM 4hour Indicators Tool                   | Same as above but for 4h timeframe.                                              |\n| Binance SM 1day Indicators Tool                    | Same as above but for 1d timeframe.                                              |\n| Binance SM Indicators Webhook Tool                 | Technical backend. Handles all webhook logic for each timeframe tool.            |\n\n---\n\n## ⚙️ Installation Instructions\n\n### Step 1: Import Workflows\n\n* Open your **n8n Editor UI**\n* Import each workflow JSON file one by one\n* Activate them or ensure they're called via `Execute Workflow`\n\n### Step 2: Set Credentials\n\n* **OpenAI API Credential**: Add your OpenAI key for GPT-4o or GPT-4.1\n* **Binance Price Data**: No auth needed (public endpoint)\n\n### Step 3: Configure Webhook Endpoints\n\n* Deploy **Binance SM Indicators Webhook Tool**\n* Ensure the following routes are reachable:\n\n  * `/webhook/15m`\n  * `/webhook/1h`\n  * `/webhook/4h`\n  * `/webhook/1d`\n\n### Step 4: Telegram Integration\n\n* Add your Telegram Bot to n8n with correct API token\n* Update the **Telegram ID check node** with your own ID\n* Messages from your ID will trigger the agent\n\n### Step 5: Final Agent Execution\n\n* Trigger `Binance Spot Market Quant AI Agent` manually or from Telegram\n* The agent:\n\n  * Calls all connected tools with symbol and sessionId\n  * Waits for full indicator + sentiment response\n  * Returns a formatted multi-part trading report\n\n---\n\n## 🖥️ System Workflow Overview\n\n```\n[Telegram Trigger]\n→ [Session Memory + ID Check]\n→ [Quant Agent]\n→ [Financial Analyst Tool + Sentiment Tool]\n→ [All Indicators (15m, 1h, 4h, 1d)]\n→ [Price/Kline/OrderBook Tool]\n→ [News and Sentiment Webhook]\n→ [Signal Reasoning + Report Formatting]\n→ [Final Telegram HTML Message]\n```\n\n---\n\n## 📬 Telegram Output Style\n\n```html\n<b>BTCUSDT Market Report</b>\n\n<b>Spot Strategy</b>\n• Action: Buy\n• Entry: $63,800 | SL: $61,200 | TP: $66,500\n• Reason:\n - MACD Crossover (1h)\n - RSI Rebound from Oversold (15m)\n - Sentiment: Bullish\n\n<b>Leverage Strategy</b>\n• Position: Long 3x\n• Entry: $63,800\n• SL/TP zones same as above\n\n<b>News Sentiment:</b> Slightly Bullish\n• \"Bitcoin rallies as ETF inflows surge\" – CoinDesk\n• \"Whales accumulate BTC at key support\" – NewsBTC\n```\n\n---\n\n## 🚀 Support & Licensing\n\n🔗 **Don Jayamaha – LinkedIn**\n[linkedin.com/in/donjayamahajr](http://linkedin.com/in/donjayamahajr)\n\n© 2025 Treasurium Capital Limited Company. All rights reserved.\nThis system architecture, prompts, and workflow structure are proprietary and protected by **U.S. copyright law**. Reuse or resale prohibited without license.\n",
+        "height": 2540,
+        "width": 1780
+      },
+      "id": "0cb2f1e8-4bba-475d-8646-59055388e957",
+      "name": "Sticky Note10",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        60,
+        80
+      ],
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Binance Spot Market Quant AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adds \"SessionId\"": {
+      "main": [
+        [
+          {
+            "node": "Binance Spot Market Quant AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "User Authentication (Replace Telegram ID)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Binance Spot Market Quant AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Binance SM Financial Analyst Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance Spot Market Quant AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Binance Spot Market Quant AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Splits message is more than 4000 characters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News and Sentiment Analysis Request": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance Spot Market Quant AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Authentication (Replace Telegram ID)": {
+      "main": [
+        [
+          {
+            "node": "Adds \"SessionId\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Splits message is more than 4000 characters": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ed69cc09-9efc-44a1-9c2d-0cabf102a0dd",
+  "meta": {
+    "instanceId": "c2f222dec590bd18822443a5488a8477fdebbc865744c111da086d9a82f0d6be"
+  },
+  "id": "ySt4qS7tcet5iGgH",
+  "tags": []
+}

@@ -1,0 +1,1616 @@
+{
+  "name": "Binance SM Indicators Webhook Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{$json.body.symbol}}"
+            },
+            {
+              "name": "interval",
+              "value": "15m"
+            },
+            {
+              "name": "limit",
+              "value": "40"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ffb64de2-c38d-4fdf-bb91-145cd0617f4c",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -720,
+        680
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "39cc366c-af5f-472a-9d48-bbe30a4fe3ea",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "870e6943-4e63-4d03-85c5-9f81c2db8be1",
+      "name": "Webhook 15m Indicators",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -1100,
+        680
+      ],
+      "webhookId": "39cc366c-af5f-472a-9d48-bbe30a4fe3ea",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const klines = $input.all().map(item => item.json);\nreturn [{ json: { klines } }];"
+      },
+      "id": "198259be-7c67-44c8-bb8e-ae4e3128332b",
+      "name": "Merge Into 1 Array",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -380,
+        680
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get raw klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20;\nconst stdMultiplier = 2;\n\n// Validate type\nif (!Array.isArray(klines)) {\n  throw new Error(\"klines is not an array\");\n}\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Ensure enough data\nif (closes.length < period) {\n  throw new Error(`Not enough data: got ${closes.length}, expected at least ${period}`);\n}\n\n// BB calculation logic\nfunction calculateBB(prices, period) {\n  const result = [];\n  for (let i = period - 1; i < prices.length; i++) {\n    const slice = prices.slice(i - period + 1, i + 1);\n    const mean = slice.reduce((sum, val) => sum + val, 0) / period;\n    const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;\n    const stdDev = Math.sqrt(variance);\n\n    result.push({\n      close: prices[i],\n      basis: mean,\n      upper: mean + stdMultiplier * stdDev,\n      lower: mean - stdMultiplier * stdDev,\n      timestamp: klines[i][0]\n    });\n  }\n  return result;\n}\n\n// Calculate bands\nconst bands = calculateBB(closes, period);\n\n// Format output\nreturn bands.map(b => ({\n  json: {\n    timestamp: b.timestamp,\n    close: b.close,\n    bb_basis: b.basis,\n    bb_upper: b.upper,\n    bb_lower: b.lower\n  }\n}));"
+      },
+      "id": "c6642e12-db92-44f1-8890-78540ddecf37",
+      "name": "Calculate Bollinger Bands",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        220
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull klines array from JSON\nconst klines = $input.first().json.klines;\n\n// === CONFIGURATION ===\nconst period = 14; // RSI period\n\n// === Extract closing prices ===\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// === Ensure enough data ===\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for RSI. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// === RSI Calculation ===\nfunction calculateRSI(prices, period) {\n  const result = [];\n\n  for (let i = period; i < prices.length; i++) {\n    let gains = 0;\n    let losses = 0;\n\n    for (let j = i - period + 1; j <= i; j++) {\n      const change = prices[j] - prices[j - 1];\n      if (change >= 0) gains += change;\n      else losses -= change;\n    }\n\n    const avgGain = gains / period;\n    const avgLoss = losses / period;\n\n    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;\n    const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));\n\n    result.push({\n      timestamp: klines[i][0],\n      close: prices[i],\n      rsi: rsi\n    });\n  }\n\n  return result;\n}\n\n// === Run RSI ===\nconst rsiSeries = calculateRSI(closes, period);\n\n// === Return formatted RSI output ===\nreturn rsiSeries.map(r => ({\n  json: {\n    timestamp: r.timestamp,\n    close: r.close,\n    rsi: r.rsi\n  }\n}));"
+      },
+      "id": "cbafec7d-922e-4e0b-9924-a7479c8cd73a",
+      "name": "Calculate RSI",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        440
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Parameters\nconst fastPeriod = 12;\nconst slowPeriod = 26;\nconst signalPeriod = 9;\n\n// Validate data length\nconst minRequired = slowPeriod + signalPeriod;\nif (closes.length < minRequired) {\n  throw new Error(`Not enough data for MACD. Need at least ${minRequired}, got ${closes.length}`);\n}\n\n// === Helper: EMA function ===\nfunction calculateEMA(prices, period) {\n  const k = 2 / (period + 1);\n  const ema = [prices.slice(0, period).reduce((a, b) => a + b, 0) / period];\n\n  for (let i = period; i < prices.length; i++) {\n    ema.push(prices[i] * k + ema[ema.length - 1] * (1 - k));\n  }\n\n  return ema;\n}\n\n// === MACD Core Calculation ===\nconst slowEMA = calculateEMA(closes, slowPeriod);\nconst fastEMA = calculateEMA(closes.slice(slowPeriod - fastPeriod), fastPeriod);\n\n// Align lengths\nconst alignedFastEMA = fastEMA.slice(fastEMA.length - slowEMA.length);\nconst macdLine = alignedFastEMA.map((val, i) => val - slowEMA[i]);\n\n// Signal line\nconst signalLine = calculateEMA(macdLine, signalPeriod);\n\n// Histogram\nconst histogram = macdLine.slice(signalPeriod - 1).map((macd, i) => macd - signalLine[i]);\n\n// Final output start index\nconst startIndex = closes.length - histogram.length;\n\nconst result = [];\n\nfor (let i = 0; i < histogram.length; i++) {\n  const idx = startIndex + i;\n  result.push({\n    timestamp: klines[idx]?.[0] || null,\n    close: closes[idx],\n    macd: macdLine[i + signalPeriod - 1],\n    signal: signalLine[i],\n    histogram: histogram[i]\n  });\n}\n\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "1a33a18d-b84a-4714-8680-2b6370117718",
+      "name": "Calculate MACD",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        640
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 50, 100, 200, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute SMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// Calculate SMA values\nconst result = [];\n\nfor (let i = period - 1; i < closes.length; i++) {\n  const slice = closes.slice(i - period + 1, i + 1);\n  const sum = slice.reduce((a, b) => a + b, 0);\n  const average = sum / period;\n\n  result.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    sma: average\n  });\n}\n\n// Return formatted output\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "b2b23df8-270f-41f9-bcd1-67d8ceb1a675",
+      "name": "Calculate SMA",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        880
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 9, 12, 26, 50, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute EMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// EMA Calculation\nconst k = 2 / (period + 1);\nconst ema = [];\n\n// Start with SMA of first period\nlet sma = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;\nema.push({\n  timestamp: klines[period - 1][0],\n  close: closes[period - 1],\n  ema: sma\n});\n\n// Continue EMA calculation\nfor (let i = period; i < closes.length; i++) {\n  const value = closes[i] * k + ema[ema.length - 1].ema * (1 - k);\n  ema.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    ema: value\n  });\n}\n\n// Return result\nreturn ema.map(e => ({\n  json: e\n}));"
+      },
+      "id": "57e49f36-8ba4-4975-af6f-ca1fb03a73bb",
+      "name": "Calculate EMA",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        1100
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get kline array from merged item\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 14;\n\n// Parse high, low, close arrays\nconst highs = klines.map(k => parseFloat(k[2]));\nconst lows = klines.map(k => parseFloat(k[3]));\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Validation\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for ADX. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// Initialize arrays\nconst tr = [];\nconst plusDM = [];\nconst minusDM = [];\n\n// Step 1: Calculate TR, +DM, -DM\nfor (let i = 1; i < klines.length; i++) {\n  const highDiff = highs[i] - highs[i - 1];\n  const lowDiff = lows[i - 1] - lows[i];\n  const upMove = highDiff > 0 && highDiff > lowDiff ? highDiff : 0;\n  const downMove = lowDiff > 0 && lowDiff > highDiff ? lowDiff : 0;\n\n  const trueRange = Math.max(\n    highs[i] - lows[i],\n    Math.abs(highs[i] - closes[i - 1]),\n    Math.abs(lows[i] - closes[i - 1])\n  );\n\n  tr.push(trueRange);\n  plusDM.push(upMove);\n  minusDM.push(downMove);\n}\n\n// Step 2: Smooth TR, +DM, -DM and calculate DI\nconst smoothedTR = [tr.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedPlusDM = [plusDM.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedMinusDM = [minusDM.slice(0, period).reduce((a, b) => a + b, 0)];\n\nfor (let i = period; i < tr.length; i++) {\n  smoothedTR.push(smoothedTR[smoothedTR.length - 1] - smoothedTR[smoothedTR.length - 1] / period + tr[i]);\n  smoothedPlusDM.push(smoothedPlusDM[smoothedPlusDM.length - 1] - smoothedPlusDM[smoothedPlusDM.length - 1] / period + plusDM[i]);\n  smoothedMinusDM.push(smoothedMinusDM[smoothedMinusDM.length - 1] - smoothedMinusDM[smoothedMinusDM.length - 1] / period + minusDM[i]);\n}\n\nconst plusDI = smoothedPlusDM.map((val, i) => 100 * val / smoothedTR[i]);\nconst minusDI = smoothedMinusDM.map((val, i) => 100 * val / smoothedTR[i]);\n\n// Step 3: Calculate DX\nconst dx = plusDI.map((val, i) => {\n  const diff = Math.abs(plusDI[i] - minusDI[i]);\n  const sum = plusDI[i] + minusDI[i];\n  return sum === 0 ? 0 : 100 * (diff / sum);\n});\n\n// Step 4: Smooth DX into ADX\nconst adx = [];\nconst firstADX = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;\nadx.push(firstADX);\n\nfor (let i = period; i < dx.length; i++) {\n  const newADX = (adx[adx.length - 1] * (period - 1) + dx[i]) / period;\n  adx.push(newADX);\n}\n\n// Step 5: Final result formatting\nconst output = [];\n\nfor (let i = 0; i < adx.length; i++) {\n  const index = i + (2 * period); // account for offset\n  if (klines[index]) {\n    output.push({\n      timestamp: klines[index][0],\n      close: closes[index],\n      adx: adx[i],\n      plusDI: plusDI[i + period],\n      minusDI: minusDI[i + period]\n    });\n  }\n}\n\nreturn output.map(r => ({ json: r }));"
+      },
+      "id": "bf0184ff-8f79-444a-a66a-fc0f7014a2eb",
+      "name": "Calculate ADX",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        1340
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "numberInputs": 6
+      },
+      "id": "3de5cf87-b245-41cc-843d-9d317c2c71f8",
+      "name": "Merge 15 min Indicators",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        540,
+        600
+      ],
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "e3e5b967-d07d-40e7-818f-545dbb680c1c",
+      "name": "Respond to 15m Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        920,
+        660
+      ],
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "78948764-5cdb-4808-8ef9-2155f10dd721",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "111734de-729b-4b93-82c5-ef8cb60ede80",
+      "name": "Webhook 1h Indicators",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -2860,
+        2440
+      ],
+      "webhookId": "78948764-5cdb-4808-8ef9-2155f10dd721",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "b9fbbd79-1a20-4eb8-93ad-514d6ece759c",
+      "name": "Respond to 1h Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -700,
+        2420
+      ],
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "numberInputs": 6
+      },
+      "id": "07772794-c9ff-493b-9b25-3a24198dbd4c",
+      "name": "Merge 1h Indicators",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        -1100,
+        2360
+      ],
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "jsCode": "const klines = $input.all().map(item => item.json);\nreturn [{ json: { klines } }];"
+      },
+      "id": "95f283fa-bc18-41b0-819e-61f4c61614de",
+      "name": "Merge Into 1 Array 1h",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -2180,
+        2440
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get raw klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20;\nconst stdMultiplier = 2;\n\n// Validate type\nif (!Array.isArray(klines)) {\n  throw new Error(\"klines is not an array\");\n}\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Ensure enough data\nif (closes.length < period) {\n  throw new Error(`Not enough data: got ${closes.length}, expected at least ${period}`);\n}\n\n// BB calculation logic\nfunction calculateBB(prices, period) {\n  const result = [];\n  for (let i = period - 1; i < prices.length; i++) {\n    const slice = prices.slice(i - period + 1, i + 1);\n    const mean = slice.reduce((sum, val) => sum + val, 0) / period;\n    const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;\n    const stdDev = Math.sqrt(variance);\n\n    result.push({\n      close: prices[i],\n      basis: mean,\n      upper: mean + stdMultiplier * stdDev,\n      lower: mean - stdMultiplier * stdDev,\n      timestamp: klines[i][0]\n    });\n  }\n  return result;\n}\n\n// Calculate bands\nconst bands = calculateBB(closes, period);\n\n// Format output\nreturn bands.map(b => ({\n  json: {\n    timestamp: b.timestamp,\n    close: b.close,\n    bb_basis: b.basis,\n    bb_upper: b.upper,\n    bb_lower: b.lower\n  }\n}));"
+      },
+      "id": "9dfabb0e-5a5a-47d4-a924-4845503abf58",
+      "name": "Calculate Bollinger Bands(1h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1700,
+        1900
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull klines array from JSON\nconst klines = $input.first().json.klines;\n\n// === CONFIGURATION ===\nconst period = 14; // RSI period\n\n// === Extract closing prices ===\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// === Ensure enough data ===\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for RSI. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// === RSI Calculation ===\nfunction calculateRSI(prices, period) {\n  const result = [];\n\n  for (let i = period; i < prices.length; i++) {\n    let gains = 0;\n    let losses = 0;\n\n    for (let j = i - period + 1; j <= i; j++) {\n      const change = prices[j] - prices[j - 1];\n      if (change >= 0) gains += change;\n      else losses -= change;\n    }\n\n    const avgGain = gains / period;\n    const avgLoss = losses / period;\n\n    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;\n    const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));\n\n    result.push({\n      timestamp: klines[i][0],\n      close: prices[i],\n      rsi: rsi\n    });\n  }\n\n  return result;\n}\n\n// === Run RSI ===\nconst rsiSeries = calculateRSI(closes, period);\n\n// === Return formatted RSI output ===\nreturn rsiSeries.map(r => ({\n  json: {\n    timestamp: r.timestamp,\n    close: r.close,\n    rsi: r.rsi\n  }\n}));"
+      },
+      "id": "5411f3d1-05e1-486b-9a4c-fc97272687eb",
+      "name": "Calculate RSI(1h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1700,
+        2180
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Parameters\nconst fastPeriod = 12;\nconst slowPeriod = 26;\nconst signalPeriod = 9;\n\n// Validate data length\nconst minRequired = slowPeriod + signalPeriod;\nif (closes.length < minRequired) {\n  throw new Error(`Not enough data for MACD. Need at least ${minRequired}, got ${closes.length}`);\n}\n\n// === Helper: EMA function ===\nfunction calculateEMA(prices, period) {\n  const k = 2 / (period + 1);\n  const ema = [prices.slice(0, period).reduce((a, b) => a + b, 0) / period];\n\n  for (let i = period; i < prices.length; i++) {\n    ema.push(prices[i] * k + ema[ema.length - 1] * (1 - k));\n  }\n\n  return ema;\n}\n\n// === MACD Core Calculation ===\nconst slowEMA = calculateEMA(closes, slowPeriod);\nconst fastEMA = calculateEMA(closes.slice(slowPeriod - fastPeriod), fastPeriod);\n\n// Align lengths\nconst alignedFastEMA = fastEMA.slice(fastEMA.length - slowEMA.length);\nconst macdLine = alignedFastEMA.map((val, i) => val - slowEMA[i]);\n\n// Signal line\nconst signalLine = calculateEMA(macdLine, signalPeriod);\n\n// Histogram\nconst histogram = macdLine.slice(signalPeriod - 1).map((macd, i) => macd - signalLine[i]);\n\n// Final output start index\nconst startIndex = closes.length - histogram.length;\n\nconst result = [];\n\nfor (let i = 0; i < histogram.length; i++) {\n  const idx = startIndex + i;\n  result.push({\n    timestamp: klines[idx]?.[0] || null,\n    close: closes[idx],\n    macd: macdLine[i + signalPeriod - 1],\n    signal: signalLine[i],\n    histogram: histogram[i]\n  });\n}\n\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "f7ea3116-75ed-4438-9d17-1ea51b661bbf",
+      "name": "Calculate MACD(1h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1700,
+        2400
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 50, 100, 200, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute SMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// Calculate SMA values\nconst result = [];\n\nfor (let i = period - 1; i < closes.length; i++) {\n  const slice = closes.slice(i - period + 1, i + 1);\n  const sum = slice.reduce((a, b) => a + b, 0);\n  const average = sum / period;\n\n  result.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    sma: average\n  });\n}\n\n// Return formatted output\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "2da1286c-b431-4af2-9372-5a244b00fd0a",
+      "name": "Calculate SMA(1h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1700,
+        2640
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 9, 12, 26, 50, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute EMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// EMA Calculation\nconst k = 2 / (period + 1);\nconst ema = [];\n\n// Start with SMA of first period\nlet sma = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;\nema.push({\n  timestamp: klines[period - 1][0],\n  close: closes[period - 1],\n  ema: sma\n});\n\n// Continue EMA calculation\nfor (let i = period; i < closes.length; i++) {\n  const value = closes[i] * k + ema[ema.length - 1].ema * (1 - k);\n  ema.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    ema: value\n  });\n}\n\n// Return result\nreturn ema.map(e => ({\n  json: e\n}));"
+      },
+      "id": "822ce5b6-d36d-4ea2-b155-1dd647f4aa4c",
+      "name": "Calculate EMA(1h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1700,
+        2900
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get kline array from merged item\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 14;\n\n// Parse high, low, close arrays\nconst highs = klines.map(k => parseFloat(k[2]));\nconst lows = klines.map(k => parseFloat(k[3]));\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Validation\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for ADX. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// Initialize arrays\nconst tr = [];\nconst plusDM = [];\nconst minusDM = [];\n\n// Step 1: Calculate TR, +DM, -DM\nfor (let i = 1; i < klines.length; i++) {\n  const highDiff = highs[i] - highs[i - 1];\n  const lowDiff = lows[i - 1] - lows[i];\n  const upMove = highDiff > 0 && highDiff > lowDiff ? highDiff : 0;\n  const downMove = lowDiff > 0 && lowDiff > highDiff ? lowDiff : 0;\n\n  const trueRange = Math.max(\n    highs[i] - lows[i],\n    Math.abs(highs[i] - closes[i - 1]),\n    Math.abs(lows[i] - closes[i - 1])\n  );\n\n  tr.push(trueRange);\n  plusDM.push(upMove);\n  minusDM.push(downMove);\n}\n\n// Step 2: Smooth TR, +DM, -DM and calculate DI\nconst smoothedTR = [tr.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedPlusDM = [plusDM.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedMinusDM = [minusDM.slice(0, period).reduce((a, b) => a + b, 0)];\n\nfor (let i = period; i < tr.length; i++) {\n  smoothedTR.push(smoothedTR[smoothedTR.length - 1] - smoothedTR[smoothedTR.length - 1] / period + tr[i]);\n  smoothedPlusDM.push(smoothedPlusDM[smoothedPlusDM.length - 1] - smoothedPlusDM[smoothedPlusDM.length - 1] / period + plusDM[i]);\n  smoothedMinusDM.push(smoothedMinusDM[smoothedMinusDM.length - 1] - smoothedMinusDM[smoothedMinusDM.length - 1] / period + minusDM[i]);\n}\n\nconst plusDI = smoothedPlusDM.map((val, i) => 100 * val / smoothedTR[i]);\nconst minusDI = smoothedMinusDM.map((val, i) => 100 * val / smoothedTR[i]);\n\n// Step 3: Calculate DX\nconst dx = plusDI.map((val, i) => {\n  const diff = Math.abs(plusDI[i] - minusDI[i]);\n  const sum = plusDI[i] + minusDI[i];\n  return sum === 0 ? 0 : 100 * (diff / sum);\n});\n\n// Step 4: Smooth DX into ADX\nconst adx = [];\nconst firstADX = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;\nadx.push(firstADX);\n\nfor (let i = period; i < dx.length; i++) {\n  const newADX = (adx[adx.length - 1] * (period - 1) + dx[i]) / period;\n  adx.push(newADX);\n}\n\n// Step 5: Final result formatting\nconst output = [];\n\nfor (let i = 0; i < adx.length; i++) {\n  const index = i + (2 * period); // account for offset\n  if (klines[index]) {\n    output.push({\n      timestamp: klines[index][0],\n      close: closes[index],\n      adx: adx[i],\n      plusDI: plusDI[i + period],\n      minusDI: minusDI[i + period]\n    });\n  }\n}\n\nreturn output.map(r => ({ json: r }));"
+      },
+      "id": "0aeebfab-0522-4cd4-88d1-2d9e62c4941f",
+      "name": "Calculate ADX1",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1700,
+        3100
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{$json.body.symbol}}"
+            },
+            {
+              "name": "interval",
+              "value": "1h"
+            },
+            {
+              "name": "limit",
+              "value": "40"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "704dbadb-e397-428e-a2ac-f9c828581f40",
+      "name": "HTTP Request 1h",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -2520,
+        2440
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "55fd9665-ed4a-4e1a-8062-890cad0fb6ac",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "266ef1c0-7bbd-4393-9976-bfd6c0aab3cb",
+      "name": "Webhook 4h Indicators",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        320,
+        2360
+      ],
+      "webhookId": "55fd9665-ed4a-4e1a-8062-890cad0fb6ac",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{$json.body.symbol}}"
+            },
+            {
+              "name": "interval",
+              "value": "4h"
+            },
+            {
+              "name": "limit",
+              "value": "40"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f139ff6b-3824-4384-9407-7cad722d4358",
+      "name": "HTTP Request 4h",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        660,
+        2360
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "jsCode": "const klines = $input.all().map(item => item.json);\nreturn [{ json: { klines } }];"
+      },
+      "id": "2d8c1a81-7a89-441b-ac55-1e77c4b7608b",
+      "name": "Merge Into 1 Array 4h",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1000,
+        2360
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get raw klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20;\nconst stdMultiplier = 2;\n\n// Validate type\nif (!Array.isArray(klines)) {\n  throw new Error(\"klines is not an array\");\n}\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Ensure enough data\nif (closes.length < period) {\n  throw new Error(`Not enough data: got ${closes.length}, expected at least ${period}`);\n}\n\n// BB calculation logic\nfunction calculateBB(prices, period) {\n  const result = [];\n  for (let i = period - 1; i < prices.length; i++) {\n    const slice = prices.slice(i - period + 1, i + 1);\n    const mean = slice.reduce((sum, val) => sum + val, 0) / period;\n    const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;\n    const stdDev = Math.sqrt(variance);\n\n    result.push({\n      close: prices[i],\n      basis: mean,\n      upper: mean + stdMultiplier * stdDev,\n      lower: mean - stdMultiplier * stdDev,\n      timestamp: klines[i][0]\n    });\n  }\n  return result;\n}\n\n// Calculate bands\nconst bands = calculateBB(closes, period);\n\n// Format output\nreturn bands.map(b => ({\n  json: {\n    timestamp: b.timestamp,\n    close: b.close,\n    bb_basis: b.basis,\n    bb_upper: b.upper,\n    bb_lower: b.lower\n  }\n}));"
+      },
+      "id": "66b6c86b-b50d-4e57-b4cc-34f9015b364d",
+      "name": "Calculate Bollinger Bands(4h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1480,
+        1860
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull klines array from JSON\nconst klines = $input.first().json.klines;\n\n// === CONFIGURATION ===\nconst period = 14; // RSI period\n\n// === Extract closing prices ===\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// === Ensure enough data ===\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for RSI. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// === RSI Calculation ===\nfunction calculateRSI(prices, period) {\n  const result = [];\n\n  for (let i = period; i < prices.length; i++) {\n    let gains = 0;\n    let losses = 0;\n\n    for (let j = i - period + 1; j <= i; j++) {\n      const change = prices[j] - prices[j - 1];\n      if (change >= 0) gains += change;\n      else losses -= change;\n    }\n\n    const avgGain = gains / period;\n    const avgLoss = losses / period;\n\n    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;\n    const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));\n\n    result.push({\n      timestamp: klines[i][0],\n      close: prices[i],\n      rsi: rsi\n    });\n  }\n\n  return result;\n}\n\n// === Run RSI ===\nconst rsiSeries = calculateRSI(closes, period);\n\n// === Return formatted RSI output ===\nreturn rsiSeries.map(r => ({\n  json: {\n    timestamp: r.timestamp,\n    close: r.close,\n    rsi: r.rsi\n  }\n}));"
+      },
+      "id": "9987b67e-2f04-4a21-8da2-be50b461e46b",
+      "name": "Calculate RSI(4h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1480,
+        2100
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Parameters\nconst fastPeriod = 12;\nconst slowPeriod = 26;\nconst signalPeriod = 9;\n\n// Validate data length\nconst minRequired = slowPeriod + signalPeriod;\nif (closes.length < minRequired) {\n  throw new Error(`Not enough data for MACD. Need at least ${minRequired}, got ${closes.length}`);\n}\n\n// === Helper: EMA function ===\nfunction calculateEMA(prices, period) {\n  const k = 2 / (period + 1);\n  const ema = [prices.slice(0, period).reduce((a, b) => a + b, 0) / period];\n\n  for (let i = period; i < prices.length; i++) {\n    ema.push(prices[i] * k + ema[ema.length - 1] * (1 - k));\n  }\n\n  return ema;\n}\n\n// === MACD Core Calculation ===\nconst slowEMA = calculateEMA(closes, slowPeriod);\nconst fastEMA = calculateEMA(closes.slice(slowPeriod - fastPeriod), fastPeriod);\n\n// Align lengths\nconst alignedFastEMA = fastEMA.slice(fastEMA.length - slowEMA.length);\nconst macdLine = alignedFastEMA.map((val, i) => val - slowEMA[i]);\n\n// Signal line\nconst signalLine = calculateEMA(macdLine, signalPeriod);\n\n// Histogram\nconst histogram = macdLine.slice(signalPeriod - 1).map((macd, i) => macd - signalLine[i]);\n\n// Final output start index\nconst startIndex = closes.length - histogram.length;\n\nconst result = [];\n\nfor (let i = 0; i < histogram.length; i++) {\n  const idx = startIndex + i;\n  result.push({\n    timestamp: klines[idx]?.[0] || null,\n    close: closes[idx],\n    macd: macdLine[i + signalPeriod - 1],\n    signal: signalLine[i],\n    histogram: histogram[i]\n  });\n}\n\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "f6959ef3-3dbb-4902-823b-a319c0fd0702",
+      "name": "Calculate MACD(4h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1480,
+        2340
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 50, 100, 200, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute SMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// Calculate SMA values\nconst result = [];\n\nfor (let i = period - 1; i < closes.length; i++) {\n  const slice = closes.slice(i - period + 1, i + 1);\n  const sum = slice.reduce((a, b) => a + b, 0);\n  const average = sum / period;\n\n  result.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    sma: average\n  });\n}\n\n// Return formatted output\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "07efa54e-8e1f-4b11-a38c-f0e6e6e2d50d",
+      "name": "Calculate SMA(4h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1480,
+        2560
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 9, 12, 26, 50, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute EMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// EMA Calculation\nconst k = 2 / (period + 1);\nconst ema = [];\n\n// Start with SMA of first period\nlet sma = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;\nema.push({\n  timestamp: klines[period - 1][0],\n  close: closes[period - 1],\n  ema: sma\n});\n\n// Continue EMA calculation\nfor (let i = period; i < closes.length; i++) {\n  const value = closes[i] * k + ema[ema.length - 1].ema * (1 - k);\n  ema.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    ema: value\n  });\n}\n\n// Return result\nreturn ema.map(e => ({\n  json: e\n}));"
+      },
+      "id": "3bb6148d-d41c-4789-b6e6-f0bc0e2e0c36",
+      "name": "Calculate EMA(4h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1480,
+        2780
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get kline array from merged item\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 14;\n\n// Parse high, low, close arrays\nconst highs = klines.map(k => parseFloat(k[2]));\nconst lows = klines.map(k => parseFloat(k[3]));\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Validation\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for ADX. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// Initialize arrays\nconst tr = [];\nconst plusDM = [];\nconst minusDM = [];\n\n// Step 1: Calculate TR, +DM, -DM\nfor (let i = 1; i < klines.length; i++) {\n  const highDiff = highs[i] - highs[i - 1];\n  const lowDiff = lows[i - 1] - lows[i];\n  const upMove = highDiff > 0 && highDiff > lowDiff ? highDiff : 0;\n  const downMove = lowDiff > 0 && lowDiff > highDiff ? lowDiff : 0;\n\n  const trueRange = Math.max(\n    highs[i] - lows[i],\n    Math.abs(highs[i] - closes[i - 1]),\n    Math.abs(lows[i] - closes[i - 1])\n  );\n\n  tr.push(trueRange);\n  plusDM.push(upMove);\n  minusDM.push(downMove);\n}\n\n// Step 2: Smooth TR, +DM, -DM and calculate DI\nconst smoothedTR = [tr.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedPlusDM = [plusDM.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedMinusDM = [minusDM.slice(0, period).reduce((a, b) => a + b, 0)];\n\nfor (let i = period; i < tr.length; i++) {\n  smoothedTR.push(smoothedTR[smoothedTR.length - 1] - smoothedTR[smoothedTR.length - 1] / period + tr[i]);\n  smoothedPlusDM.push(smoothedPlusDM[smoothedPlusDM.length - 1] - smoothedPlusDM[smoothedPlusDM.length - 1] / period + plusDM[i]);\n  smoothedMinusDM.push(smoothedMinusDM[smoothedMinusDM.length - 1] - smoothedMinusDM[smoothedMinusDM.length - 1] / period + minusDM[i]);\n}\n\nconst plusDI = smoothedPlusDM.map((val, i) => 100 * val / smoothedTR[i]);\nconst minusDI = smoothedMinusDM.map((val, i) => 100 * val / smoothedTR[i]);\n\n// Step 3: Calculate DX\nconst dx = plusDI.map((val, i) => {\n  const diff = Math.abs(plusDI[i] - minusDI[i]);\n  const sum = plusDI[i] + minusDI[i];\n  return sum === 0 ? 0 : 100 * (diff / sum);\n});\n\n// Step 4: Smooth DX into ADX\nconst adx = [];\nconst firstADX = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;\nadx.push(firstADX);\n\nfor (let i = period; i < dx.length; i++) {\n  const newADX = (adx[adx.length - 1] * (period - 1) + dx[i]) / period;\n  adx.push(newADX);\n}\n\n// Step 5: Final result formatting\nconst output = [];\n\nfor (let i = 0; i < adx.length; i++) {\n  const index = i + (2 * period); // account for offset\n  if (klines[index]) {\n    output.push({\n      timestamp: klines[index][0],\n      close: closes[index],\n      adx: adx[i],\n      plusDI: plusDI[i + period],\n      minusDI: minusDI[i + period]\n    });\n  }\n}\n\nreturn output.map(r => ({ json: r }));"
+      },
+      "id": "534ddd98-7db9-4486-b090-8938c6bfb493",
+      "name": "Calculate ADX (4h)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1480,
+        3040
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "numberInputs": 6
+      },
+      "id": "36e54270-f887-46c5-ab24-cd16f942d140",
+      "name": "Merge 4h Indicators",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        2080,
+        2280
+      ],
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "47ae90df-c260-45eb-8986-bc86c6266d20",
+      "name": "Respond to 4h Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        2480,
+        2340
+      ],
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "23c8ec04-5aec-49c6-9c2c-c352ccec11b4",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f54abc32-934d-456b-9093-d0bb4c3f212c",
+      "name": "Webhook 1d Indicators",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -1240,
+        3820
+      ],
+      "webhookId": "23c8ec04-5aec-49c6-9c2c-c352ccec11b4",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{$json.body.symbol}}"
+            },
+            {
+              "name": "interval",
+              "value": "1d"
+            },
+            {
+              "name": "limit",
+              "value": "40"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8ffd9bfe-cfaa-4ba6-be32-b748fd1d35b2",
+      "name": "HTTP Request 1d",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -900,
+        3820
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "jsCode": "const klines = $input.all().map(item => item.json);\nreturn [{ json: { klines } }];"
+      },
+      "id": "a700e7f4-a400-4f1b-be1e-27a338c16f7f",
+      "name": "Merge Into 1 Array 1d",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -540,
+        3820
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get raw klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20;\nconst stdMultiplier = 2;\n\n// Validate type\nif (!Array.isArray(klines)) {\n  throw new Error(\"klines is not an array\");\n}\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Ensure enough data\nif (closes.length < period) {\n  throw new Error(`Not enough data: got ${closes.length}, expected at least ${period}`);\n}\n\n// BB calculation logic\nfunction calculateBB(prices, period) {\n  const result = [];\n  for (let i = period - 1; i < prices.length; i++) {\n    const slice = prices.slice(i - period + 1, i + 1);\n    const mean = slice.reduce((sum, val) => sum + val, 0) / period;\n    const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;\n    const stdDev = Math.sqrt(variance);\n\n    result.push({\n      close: prices[i],\n      basis: mean,\n      upper: mean + stdMultiplier * stdDev,\n      lower: mean - stdMultiplier * stdDev,\n      timestamp: klines[i][0]\n    });\n  }\n  return result;\n}\n\n// Calculate bands\nconst bands = calculateBB(closes, period);\n\n// Format output\nreturn bands.map(b => ({\n  json: {\n    timestamp: b.timestamp,\n    close: b.close,\n    bb_basis: b.basis,\n    bb_upper: b.upper,\n    bb_lower: b.lower\n  }\n}));"
+      },
+      "id": "2360fd9c-91b0-4f0b-ba10-d57c91b78baa",
+      "name": "Calculate Bollinger Bands(1d)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -80,
+        3300
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull klines array from JSON\nconst klines = $input.first().json.klines;\n\n// === CONFIGURATION ===\nconst period = 14; // RSI period\n\n// === Extract closing prices ===\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// === Ensure enough data ===\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for RSI. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// === RSI Calculation ===\nfunction calculateRSI(prices, period) {\n  const result = [];\n\n  for (let i = period; i < prices.length; i++) {\n    let gains = 0;\n    let losses = 0;\n\n    for (let j = i - period + 1; j <= i; j++) {\n      const change = prices[j] - prices[j - 1];\n      if (change >= 0) gains += change;\n      else losses -= change;\n    }\n\n    const avgGain = gains / period;\n    const avgLoss = losses / period;\n\n    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;\n    const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));\n\n    result.push({\n      timestamp: klines[i][0],\n      close: prices[i],\n      rsi: rsi\n    });\n  }\n\n  return result;\n}\n\n// === Run RSI ===\nconst rsiSeries = calculateRSI(closes, period);\n\n// === Return formatted RSI output ===\nreturn rsiSeries.map(r => ({\n  json: {\n    timestamp: r.timestamp,\n    close: r.close,\n    rsi: r.rsi\n  }\n}));"
+      },
+      "id": "a316fc34-3652-4766-87fc-91fb692c84c6",
+      "name": "Calculate RSI(1d)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -80,
+        3560
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Parameters\nconst fastPeriod = 12;\nconst slowPeriod = 26;\nconst signalPeriod = 9;\n\n// Validate data length\nconst minRequired = slowPeriod + signalPeriod;\nif (closes.length < minRequired) {\n  throw new Error(`Not enough data for MACD. Need at least ${minRequired}, got ${closes.length}`);\n}\n\n// === Helper: EMA function ===\nfunction calculateEMA(prices, period) {\n  const k = 2 / (period + 1);\n  const ema = [prices.slice(0, period).reduce((a, b) => a + b, 0) / period];\n\n  for (let i = period; i < prices.length; i++) {\n    ema.push(prices[i] * k + ema[ema.length - 1] * (1 - k));\n  }\n\n  return ema;\n}\n\n// === MACD Core Calculation ===\nconst slowEMA = calculateEMA(closes, slowPeriod);\nconst fastEMA = calculateEMA(closes.slice(slowPeriod - fastPeriod), fastPeriod);\n\n// Align lengths\nconst alignedFastEMA = fastEMA.slice(fastEMA.length - slowEMA.length);\nconst macdLine = alignedFastEMA.map((val, i) => val - slowEMA[i]);\n\n// Signal line\nconst signalLine = calculateEMA(macdLine, signalPeriod);\n\n// Histogram\nconst histogram = macdLine.slice(signalPeriod - 1).map((macd, i) => macd - signalLine[i]);\n\n// Final output start index\nconst startIndex = closes.length - histogram.length;\n\nconst result = [];\n\nfor (let i = 0; i < histogram.length; i++) {\n  const idx = startIndex + i;\n  result.push({\n    timestamp: klines[idx]?.[0] || null,\n    close: closes[idx],\n    macd: macdLine[i + signalPeriod - 1],\n    signal: signalLine[i],\n    histogram: histogram[i]\n  });\n}\n\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "ed196bdc-6335-43ed-9b14-44de8f18a5c3",
+      "name": "Calculate MACD(1d)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -80,
+        3800
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 50, 100, 200, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute SMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// Calculate SMA values\nconst result = [];\n\nfor (let i = period - 1; i < closes.length; i++) {\n  const slice = closes.slice(i - period + 1, i + 1);\n  const sum = slice.reduce((a, b) => a + b, 0);\n  const average = sum / period;\n\n  result.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    sma: average\n  });\n}\n\n// Return formatted output\nreturn result.map(r => ({\n  json: r\n}));"
+      },
+      "id": "1f4012c2-09a9-4b04-b76a-447f7a21e5ec",
+      "name": "Calculate SMA(1d)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -80,
+        4020
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get klines array\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 20; // Change to 9, 12, 26, 50, etc. as needed\n\n// Extract closing prices\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Check for sufficient data\nif (closes.length < period) {\n  throw new Error(`Not enough data to compute EMA. Need at least ${period}, got ${closes.length}`);\n}\n\n// EMA Calculation\nconst k = 2 / (period + 1);\nconst ema = [];\n\n// Start with SMA of first period\nlet sma = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;\nema.push({\n  timestamp: klines[period - 1][0],\n  close: closes[period - 1],\n  ema: sma\n});\n\n// Continue EMA calculation\nfor (let i = period; i < closes.length; i++) {\n  const value = closes[i] * k + ema[ema.length - 1].ema * (1 - k);\n  ema.push({\n    timestamp: klines[i][0],\n    close: closes[i],\n    ema: value\n  });\n}\n\n// Return result\nreturn ema.map(e => ({\n  json: e\n}));"
+      },
+      "id": "b305a8d6-255e-4e18-96c4-d9316e11659a",
+      "name": "Calculate EMA(1d)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -80,
+        4260
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get kline array from merged item\nconst klines = $input.first().json.klines;\n\n// Parameters\nconst period = 14;\n\n// Parse high, low, close arrays\nconst highs = klines.map(k => parseFloat(k[2]));\nconst lows = klines.map(k => parseFloat(k[3]));\nconst closes = klines.map(k => parseFloat(k[4]));\n\n// Validation\nif (closes.length < period + 1) {\n  throw new Error(`Not enough data for ADX. Need at least ${period + 1}, got ${closes.length}`);\n}\n\n// Initialize arrays\nconst tr = [];\nconst plusDM = [];\nconst minusDM = [];\n\n// Step 1: Calculate TR, +DM, -DM\nfor (let i = 1; i < klines.length; i++) {\n  const highDiff = highs[i] - highs[i - 1];\n  const lowDiff = lows[i - 1] - lows[i];\n  const upMove = highDiff > 0 && highDiff > lowDiff ? highDiff : 0;\n  const downMove = lowDiff > 0 && lowDiff > highDiff ? lowDiff : 0;\n\n  const trueRange = Math.max(\n    highs[i] - lows[i],\n    Math.abs(highs[i] - closes[i - 1]),\n    Math.abs(lows[i] - closes[i - 1])\n  );\n\n  tr.push(trueRange);\n  plusDM.push(upMove);\n  minusDM.push(downMove);\n}\n\n// Step 2: Smooth TR, +DM, -DM and calculate DI\nconst smoothedTR = [tr.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedPlusDM = [plusDM.slice(0, period).reduce((a, b) => a + b, 0)];\nconst smoothedMinusDM = [minusDM.slice(0, period).reduce((a, b) => a + b, 0)];\n\nfor (let i = period; i < tr.length; i++) {\n  smoothedTR.push(smoothedTR[smoothedTR.length - 1] - smoothedTR[smoothedTR.length - 1] / period + tr[i]);\n  smoothedPlusDM.push(smoothedPlusDM[smoothedPlusDM.length - 1] - smoothedPlusDM[smoothedPlusDM.length - 1] / period + plusDM[i]);\n  smoothedMinusDM.push(smoothedMinusDM[smoothedMinusDM.length - 1] - smoothedMinusDM[smoothedMinusDM.length - 1] / period + minusDM[i]);\n}\n\nconst plusDI = smoothedPlusDM.map((val, i) => 100 * val / smoothedTR[i]);\nconst minusDI = smoothedMinusDM.map((val, i) => 100 * val / smoothedTR[i]);\n\n// Step 3: Calculate DX\nconst dx = plusDI.map((val, i) => {\n  const diff = Math.abs(plusDI[i] - minusDI[i]);\n  const sum = plusDI[i] + minusDI[i];\n  return sum === 0 ? 0 : 100 * (diff / sum);\n});\n\n// Step 4: Smooth DX into ADX\nconst adx = [];\nconst firstADX = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;\nadx.push(firstADX);\n\nfor (let i = period; i < dx.length; i++) {\n  const newADX = (adx[adx.length - 1] * (period - 1) + dx[i]) / period;\n  adx.push(newADX);\n}\n\n// Step 5: Final result formatting\nconst output = [];\n\nfor (let i = 0; i < adx.length; i++) {\n  const index = i + (2 * period); // account for offset\n  if (klines[index]) {\n    output.push({\n      timestamp: klines[index][0],\n      close: closes[index],\n      adx: adx[i],\n      plusDI: plusDI[i + period],\n      minusDI: minusDI[i + period]\n    });\n  }\n}\n\nreturn output.map(r => ({ json: r }));"
+      },
+      "id": "b83adc03-caef-41c4-b0ea-429bb1edfe11",
+      "name": "Calculate ADX (1d)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -80,
+        4460
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "numberInputs": 6
+      },
+      "id": "f68e35ad-b057-4f3c-b6b7-b5d8b2a148d3",
+      "name": "Merge 1d Indicators",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        520,
+        3740
+      ],
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "570594f6-5d88-40e5-95e4-b05d2bd399b2",
+      "name": "Respond to 1d Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        920,
+        3800
+      ],
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "content": "## Technical Indicator API Merge \n\n**Binance API** for 6 indicators:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 620,
+        "width": 260,
+        "color": 5
+      },
+      "id": "ca62b1a7-e9e2-4540-9bf0-d9a8c038d838",
+      "name": "Sticky Note13",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        460,
+        340
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Technical Indicator API Merge \n\n**Binance API** for 6 indicators:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 620,
+        "width": 260,
+        "color": 5
+      },
+      "id": "2e6aa991-1741-4b7f-82c4-c19da8d67516",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2000,
+        2020
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Technical Indicator API Merge \n\n**Binance API** for 6 indicators:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 620,
+        "width": 260,
+        "color": 5
+      },
+      "id": "645c22c1-f20e-4ecb-965e-8a17db4d57d0",
+      "name": "Sticky Note14",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1180,
+        2060
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Technical Indicator API Merge \n\n**Binance API** for 6 indicators:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 620,
+        "width": 260,
+        "color": 5
+      },
+      "id": "e576ec45-cf0a-4ee5-854a-937969ce0c07",
+      "name": "Sticky Note15",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        440,
+        3440
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks (15minData)\n\n• **Entry point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 680,
+        "color": 4
+      },
+      "id": "d18b91f9-edb6-4f09-9f16-7d04277e591e",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1180,
+        180
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks (1hourData)\n\n• **Entry point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 680,
+        "color": 4
+      },
+      "id": "e8a95b49-6a5a-46d1-a6eb-42a838296711",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2940,
+        1920
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks (4hourData)\n\n• **Entry point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 680,
+        "color": 4
+      },
+      "id": "08b89086-2662-484a-b6e5-a802df4f020a",
+      "name": "Sticky Note3",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        260,
+        1880
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks (1dayData)\n\n• **Entry point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 680,
+        "color": 4
+      },
+      "id": "0fc36c47-229b-4024-8505-2b8aadbecf0f",
+      "name": "Sticky Note4",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1320,
+        3320
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks Respond (15minData)\n\n• **Exit point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 640,
+        "width": 280,
+        "color": 4
+      },
+      "id": "09772d8e-a35d-44b9-99c4-72f1f196aace",
+      "name": "Sticky Note5",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        840,
+        200
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks Respond (4hourData)\n\n• **Exit point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 640,
+        "width": 280,
+        "color": 4
+      },
+      "id": "0b814d67-337a-4ef7-8f78-ab2e5ae650ae",
+      "name": "Sticky Note6",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2380,
+        1880
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks Respond (1hourData)\n\n• **Exit point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 640,
+        "width": 280,
+        "color": 4
+      },
+      "id": "0e1ba527-580a-4ff8-ba58-f0446f05679e",
+      "name": "Sticky Note7",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -780,
+        1940
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Webhooks Respond (1dayData)\n\n• **Exit point** for external workflows calling indicator batches\n\n• Orchestrates trigger for **indicator API pull + formatter nodes**\n\n• Returns **cleaned batch** back via Respond to Webhook node\n\n📎 Notes:\n\n• Must pass through correct **webhook** path\n\n• Responds after **merge with all 6 formatted outputs** per timeframe",
+        "height": 640,
+        "width": 280,
+        "color": 4
+      },
+      "id": "b016ff88-3cc6-4e98-8aef-2e06d5ddbe7f",
+      "name": "Sticky Note8",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        840,
+        3340
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Binance API Calls 15m \n\n• Triggers **Binance API** for k-line data:\n\n\n• Each node pulls and returns **raw API data** for formatting",
+        "height": 520,
+        "width": 260,
+        "color": 6
+      },
+      "id": "ba180b0c-9e6d-4c71-9180-7e8796564f08",
+      "name": "Sticky Note9",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -800,
+        380
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Binance API Calls 1h \n\n• Triggers **Binance API** for k-line data:\n\n\n• Each node pulls and returns **raw API data** for formatting",
+        "height": 500,
+        "width": 260,
+        "color": 6
+      },
+      "id": "e0a07b19-5057-4a34-9637-07fc61172c36",
+      "name": "Sticky Note10",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2580,
+        2160
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Binance API Calls 4h \n\n• Triggers **Binance API** for k-line data:\n\n\n• Each node pulls and returns **raw API data** for formatting",
+        "height": 500,
+        "width": 260,
+        "color": 6
+      },
+      "id": "127b575c-6bb2-414d-a1be-a13c79956505",
+      "name": "Sticky Note11",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        600,
+        2100
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Binance API Calls 1d \n\n• Triggers **Binance API** for k-line data:\n\n\n• Each node pulls and returns **raw API data** for formatting",
+        "height": 420,
+        "width": 260,
+        "color": 6
+      },
+      "id": "f0a5008e-d3e1-487b-b0ff-d8c9a83e9e66",
+      "name": "Sticky Note12",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -980,
+        3600
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Calculate Technical Indicators \n  \n\n• Ensures consistent **downstream format for merge and reasoning**\n\n📎 Notes:\n\n• **Format logic** is customized per indicator\n\n• Essential for **standardizing multi-timeframe data ingestion**",
+        "height": 1860,
+        "color": 2
+      },
+      "id": "e61cee66-9c7a-424c-bb15-c0551e00089f",
+      "name": "Sticky Note16",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1760,
+        1400
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Calculate Technical Indicators \n  \n\n• Ensures consistent **downstream format for merge and reasoning**\n\n📎 Notes:\n\n• **Format logic** is customized per indicator\n\n• Essential for **standardizing multi-timeframe data ingestion**",
+        "height": 1720,
+        "width": 260,
+        "color": 2
+      },
+      "id": "0e000b88-7e81-45f1-bd06-3c425d44d033",
+      "name": "Sticky Note17",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        0,
+        -180
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Calculate Technical Indicators \n  \n\n• Ensures consistent **downstream format for merge and reasoning**\n\n📎 Notes:\n\n• **Format logic** is customized per indicator\n\n• Essential for **standardizing multi-timeframe data ingestion**",
+        "height": 1820,
+        "width": 260,
+        "color": 2
+      },
+      "id": "b9e9b343-7426-4d86-beaf-aa6a5008303f",
+      "name": "Sticky Note18",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1400,
+        1400
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Calculate Technical Indicators \n  \n\n• Ensures consistent **downstream format for merge and reasoning**\n\n📎 Notes:\n\n• **Format logic** is customized per indicator\n\n• Essential for **standardizing multi-timeframe data ingestion**",
+        "height": 1800,
+        "width": 260,
+        "color": 2
+      },
+      "id": "d7730ee9-7a9f-4d6c-b01a-72306758f725",
+      "name": "Sticky Note19",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -160,
+        2860
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## API Merge \n\n**Binance API** for k-line Data to calculate:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 460,
+        "width": 260,
+        "color": 5
+      },
+      "id": "dc3b28d5-83df-410a-897b-7af86d647355",
+      "name": "Sticky Note20",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -460,
+        440
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## API Merge \n\n**Binance API** for k-line Data to calculate:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 420,
+        "width": 260,
+        "color": 5
+      },
+      "id": "18737401-6180-48e3-b4d9-292208afdc71",
+      "name": "Sticky Note21",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2240,
+        2240
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## API Merge \n\n**Binance API** for k-line Data to calculate:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 460,
+        "width": 260,
+        "color": 5
+      },
+      "id": "da01cc24-6971-4ce0-a531-da7c4a542400",
+      "name": "Sticky Note22",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -620,
+        3600
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## API Merge \n\n**Binance API** for k-line Data to calculate:\n\n• **RSI, MACD, BBANDS, SMA, EMA, ADX**",
+        "height": 440,
+        "width": 260,
+        "color": 5
+      },
+      "id": "afd103c8-c8cd-4141-9a0a-d19f80e5e837",
+      "name": "Sticky Note23",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        920,
+        2160
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "# 🧪 Binance SM Indicators Webhook Tool – Documentation\n\nA backend webhook processor that performs **real-time indicator calculations** for 15m, 1h, 4h, and 1d Binance candlestick data. This workflow powers all the indicator sub-agents and is essential for maintaining modular and scalable logic across timeframes.\n\n---\n\n## 🎯 Purpose\n\n* Accepts HTTP POST requests from the 15m, 1h, 4h, or 1d sub-agents\n* Pulls raw OHLCV kline data for the symbol and interval\n* Calculates technical indicators:\n\n  * RSI, MACD, Bollinger Bands, SMA, EMA, ADX\n* Returns structured JSON with labeled values (e.g., `\"MACD_Cross\": \"Bullish\"`)\n\nThis tool ensures **centralized logic reuse** across all timeframe agents while improving speed and maintainability.\n\n---\n\n## ⚙️ Key Components\n\n| Node Name              | Description                                               |\n| ---------------------- | --------------------------------------------------------- |\n| `Webhook Trigger`      | Handles POST at `/15m-indicators`, `/1h-indicators`, etc. |\n| `Extract Symbol`       | Validates input payload (must include `symbol`)           |\n| `Fetch Binance Klines` | Gets latest 100 candles using `/api/v3/klines`            |\n| `RSI Calculator`       | Computes 14-period RSI from closing prices                |\n| `MACD Calculator`      | Computes 12, 26, 9 MACD with signal and histogram         |\n| `BBANDS Calculator`    | Calculates 20-period bands using std. deviation           |\n| `SMA/EMA Node`         | Computes 20-period simple and exponential MAs             |\n| `ADX Calculator`       | Computes 14-period trend strength (DI+/DI− included)      |\n| `Prepare Output`       | Returns JSON with all labeled indicators                  |\n\n---\n\n## 📥 Expected Input (from sub-agent)\n\n```json\n{\n  \"symbol\": \"BTCUSDT\"\n}\n```\n\nMust be a valid Binance Spot trading pair. Interval is auto-routed based on webhook endpoint:\n\n| Endpoint Path     | Interval |\n| ----------------- | -------- |\n| `/15m-indicators` | 15m      |\n| `/1h-indicators`  | 1h       |\n| `/4h-indicators`  | 4h       |\n| `/1d-indicators`  | 1d       |\n\n---\n\n## 📊 Sample Output JSON\n\n```json\n{\n  \"symbol\": \"BTCUSDT\",\n  \"interval\": \"4h\",\n  \"rsi\": 65.1,\n  \"macd\": {\n    \"value\": 24.3,\n    \"signal\": 21.7,\n    \"histogram\": 2.6,\n    \"cross\": \"Bullish\"\n  },\n  \"bb\": {\n    \"basis\": 62600,\n    \"upper\": 63500,\n    \"lower\": 61700,\n    \"status\": \"Expanding\"\n  },\n  \"sma\": 62000,\n  \"ema\": 62400,\n  \"adx\": {\n    \"value\": 32.8,\n    \"strength\": \"Strong\"\n  }\n}\n```\n\n---\n\n## 🧩 Use Case Scenarios\n\n| Scenario                                   | Result                                                   |\n| ------------------------------------------ | -------------------------------------------------------- |\n| 15m tool POSTs to `/15m-indicators`        | Webhook responds with 15m indicator set                  |\n| Financial Analyst Tool requests 1h signals | This workflow handles the actual math for each indicator |\n| 1d tool needs RSI + MACD + ADX             | Centralized logic avoids duplication across agents       |\n\n---\n\n## 🛠️ Installation Instructions\n\n### 1. Import & Activate\n\n* Import JSON into n8n\n* Ensure webhook is live and accessible\n* Test each endpoint (e.g., `/1h-indicators`) via POST\n\n### 2. Connect to Binance API\n\n* Public API: no credentials required\n* Ensure the HTTP request node for klines uses:\n\n  ```\n  https://api.binance.com/api/v3/klines\n  ```\n\n### 3. Link to Sub-Agent Workflows\n\n* 15m, 1h, 4h, 1d tools all depend on this for logic\n* Must POST `symbol` to the correct interval endpoint\n\n---\n\n## 📦 Example Workflow Integration\n\nAll the following tools rely on this:\n\n* `Binance SM 15min Indicators Tool`\n* `Binance SM 1hour Indicators Tool`\n* `Binance SM 4hour Indicators Tool`\n* `Binance SM 1day Indicators Tool`\n\nThis acts as the math engine behind each.\n\n---\n\n## 🔐 Licensing & Support\n\n🔗 **Don Jayamaha – LinkedIn**\n[http://linkedin.com/in/donjayamahajr](http://linkedin.com/in/donjayamahajr)\n\n© 2025 Treasurium Capital Limited Company. All rights reserved.\nThe design, architecture, and indicator calculation code within this system are proprietary. Reuse, resale, or modification without license is strictly prohibited.\n",
+        "height": 3020,
+        "width": 1460
+      },
+      "id": "70ceeb01-8562-4e5b-82e6-47ee1d89571e",
+      "name": "Sticky Note24",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3160,
+        620
+      ],
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge Into 1 Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate ADX": {
+      "main": [
+        [
+          {
+            "node": "Merge 15 min Indicators",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Calculate EMA": {
+      "main": [
+        [
+          {
+            "node": "Merge 15 min Indicators",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Calculate RSI": {
+      "main": [
+        [
+          {
+            "node": "Merge 15 min Indicators",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Calculate SMA": {
+      "main": [
+        [
+          {
+            "node": "Merge 15 min Indicators",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Calculate ADX1": {
+      "main": [
+        [
+          {
+            "node": "Merge 1h Indicators",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Calculate MACD": {
+      "main": [
+        [
+          {
+            "node": "Merge 15 min Indicators",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "HTTP Request 1d": {
+      "main": [
+        [
+          {
+            "node": "Merge Into 1 Array 1d",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request 1h": {
+      "main": [
+        [
+          {
+            "node": "Merge Into 1 Array 1h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request 4h": {
+      "main": [
+        [
+          {
+            "node": "Merge Into 1 Array 4h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate EMA(1d)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1d Indicators",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Calculate EMA(1h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1h Indicators",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Calculate EMA(4h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 4h Indicators",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Calculate RSI(1d)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1d Indicators",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Calculate RSI(1h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1h Indicators",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Calculate RSI(4h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 4h Indicators",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Calculate SMA(1d)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1d Indicators",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Calculate SMA(1h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1h Indicators",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Calculate SMA(4h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 4h Indicators",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Calculate ADX (1d)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1d Indicators",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Calculate ADX (4h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 4h Indicators",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Calculate MACD(1d)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1d Indicators",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Calculate MACD(1h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1h Indicators",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Calculate MACD(4h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 4h Indicators",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Into 1 Array": {
+      "main": [
+        [
+          {
+            "node": "Calculate Bollinger Bands",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate RSI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate MACD",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate SMA",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate EMA",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate ADX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge 1d Indicators": {
+      "main": [
+        [
+          {
+            "node": "Respond to 1d Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge 1h Indicators": {
+      "main": [
+        [
+          {
+            "node": "Respond to 1h Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge 4h Indicators": {
+      "main": [
+        [
+          {
+            "node": "Respond to 4h Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Into 1 Array 1d": {
+      "main": [
+        [
+          {
+            "node": "Calculate Bollinger Bands(1d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate RSI(1d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate MACD(1d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate SMA(1d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate EMA(1d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate ADX (1d)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Into 1 Array 1h": {
+      "main": [
+        [
+          {
+            "node": "Calculate Bollinger Bands(1h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate RSI(1h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate MACD(1h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate SMA(1h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate EMA(1h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate ADX1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Into 1 Array 4h": {
+      "main": [
+        [
+          {
+            "node": "Calculate Bollinger Bands(4h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate RSI(4h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate MACD(4h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate SMA(4h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate EMA(4h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate ADX (4h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook 1d Indicators": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request 1d",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook 1h Indicators": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request 1h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook 4h Indicators": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request 4h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook 15m Indicators": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge 15 min Indicators": {
+      "main": [
+        [
+          {
+            "node": "Respond to 15m Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Bollinger Bands": {
+      "main": [
+        [
+          {
+            "node": "Merge 15 min Indicators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Bollinger Bands(1d)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1d Indicators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Bollinger Bands(1h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 1h Indicators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Bollinger Bands(4h)": {
+      "main": [
+        [
+          {
+            "node": "Merge 4h Indicators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7f6556df-702c-44bf-90db-c55a0e04744c",
+  "meta": {
+    "instanceId": "c2f222dec590bd18822443a5488a8477fdebbc865744c111da086d9a82f0d6be"
+  },
+  "id": "Bi3z8q9rLpKlPWv8",
+  "tags": []
+}
